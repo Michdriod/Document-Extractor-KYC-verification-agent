@@ -497,22 +497,23 @@ extractDocument('./document.pdf', true)
 
 ## AI Processing Details
 
-### Primary: Vision AI (Groq Llama-4-Scout)
+### Primary: OCR + Text AI (Groq Kimi-K2)
+
+- **OCR Engine**: PaddleOCR for text extraction
+- **Text Model**: `moonshotai/kimi-k2-instruct`
+- **Processing**: OCR text extraction followed by AI structuring
+- **Strengths**: Fast, cost-effective, handles most clear documents efficiently
+- **Typical Response Time**: 2-3 seconds
+- **Extraction Method**: "OCR+LLM (Kimi-K2)"
+
+### Fallback: Vision AI (Groq Llama-4-Scout)
 
 - **Model**: `meta-llama/llama-4-scout-17b-16e-instruct`
 - **Processing**: Direct image analysis without OCR preprocessing
 - **Strengths**: Handles complex layouts, handwritten text, poor image quality
-- **Typical Response Time**: 2-3 seconds
+- **Use Case**: When OCR processing is insufficient or produces incomplete data
+- **Typical Response Time**: 3-4 seconds
 - **Extraction Method**: "Vision LLM (Llama-4-Scout)"
-
-### Fallback: OCR + Text AI (Groq Kimi-K2)
-
-- **OCR Engine**: PaddleOCR
-- **Text Model**: `moonshotai/kimi-k2-instruct`
-- **Processing**: OCR text extraction followed by AI structuring
-- **Use Case**: When vision processing is insufficient or unavailable
-- **Typical Response Time**: 3-5 seconds
-- **Extraction Method**: "OCR+LLM (Kimi-K2)"
 
 ### JSON Schema Validation
 

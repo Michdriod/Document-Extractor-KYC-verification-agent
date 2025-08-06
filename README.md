@@ -1,10 +1,10 @@
 # Document Extractor & KYC Verification Agent
 
-A production-ready Python system for intelligent document processing and KYC verification that combines OCR technology with AI-powered extraction. Features dual AI processing with **Groq's Llama-4-Scout vision model** and **Kimi-K2 text model** for comprehensive document analysis.
+A production-ready Python system for intelligent document processing and KYC verification that combines OCR technology with AI-powered extraction. Features dual AI processing with **OCR+Text AI (Kimi-K2) primary** and **Vision AI (Llama-4-Scout) fallback** for comprehensive document analysis.
 
 ## 🚀 Key Features
 
-- **Dual AI Processing**: Groq Vision AI (Llama-4-Scout) with OCR+LLM fallback (Kimi-K2)
+- **Dual AI Processing**: OCR+Text AI (Kimi-K2) primary with Vision AI (Llama-4-Scout) fallback
 - **Multi-Document Support**: 15+ document types including international passports, IDs, licenses, and certificates
 - **Intelligent Field Filtering**: Document-specific field extraction with relevance-based filtering
 - **Production-Ready API**: FastAPI with comprehensive error handling and validation
@@ -41,17 +41,18 @@ Each document type features specialized field extraction optimized for its uniqu
 
 ## 🤖 AI Processing Pipeline
 
-### Primary: Groq Vision AI
-- **Model**: `meta-llama/llama-4-scout-17b-16e-instruct`
-- **Capability**: Direct image analysis for structured data extraction
-- **Advantage**: Processes documents without OCR preprocessing
+### Primary: OCR + Groq Text AI
+- **OCR**: PaddleOCR for text extraction
+- **Model**: `moonshotai/kimi-k2-instruct`
+- **Capability**: Fast structured text processing from extracted OCR text
+- **Advantage**: Cost-effective and efficient for most clear documents
 - **Use Case**: Primary processing for all document types
 
-### Fallback: OCR + Groq Text AI
-- **OCR**: PaddleOCR for text extraction
-- **Model**: `moonshotai/kimi-k2-instruct` 
-- **Capability**: Structures pre-extracted text into JSON
-- **Use Case**: Fallback when vision processing is insufficient
+### Fallback: Groq Vision AI
+- **Model**: `meta-llama/llama-4-scout-17b-16e-instruct`
+- **Capability**: Direct image analysis for structured data extraction
+- **Advantage**: Handles poor quality images, handwritten text, and complex layouts
+- **Use Case**: Fallback when OCR quality is insufficient or produces incomplete data
 
 ### JSON Schema Validation
 - Built-in type compliance using Groq's JSON schema support
@@ -384,8 +385,8 @@ The application includes health check endpoints:
 
 ### Processing Times
 
-- **Vision AI**: ~2-3 seconds for direct image processing
-- **OCR+LLM**: ~3-5 seconds for fallback processing
+- **OCR + Text AI**: ~2-3 seconds for primary processing of clear documents
+- **Vision AI**: ~3-4 seconds for fallback processing of complex/poor quality images
 - **Document Types**: Consistent performance across all supported formats
 
 ### Scalability
