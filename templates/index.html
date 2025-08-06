@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Document Extractor & KYC Verification Agent</title>
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Alpine.js -->
+    <script defer src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js"></script>
+    
+    <!-- Font Awesome for icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    
+    <style>
+        .drag-over {
+            @apply border-blue-500 bg-blue-50;
+        }
+        .processing {
+            animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+        }
+        .fade-in {
+            animation: fadeIn 0.5s ease-in-out;
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .structured-data {
+            display: flex;
+            flex-wrap: wrap;
+        }
+        .field {
+            margin: 5px 10px 5px 0;
+            padding: 5px 10px;
+            background-color: #e8f4f8;
+            border-radius: 3px;
+            border: 1px solid #cce5ff;
+        }
+    </style>
+</head>
+<body>
+    <h1>Document Extractor</h1>
+    <div class="container">
+        <h2>Upload Document</h2>
+        <form id="upload-form" enctype="multipart/form-data">
+            <div>
+                <input type="file" id="document" name="file" accept=".pdf,.jpg,.jpeg,.png" required>
+            </div>
+            <div style="margin-top: 10px;">
+                <label>
+                    <input type="checkbox" id="structured" name="structured">
+                    Extract structured data using AI (takes longer)
+                </label>
+            </div>
+            <div style="margin-top: 10px;">
+                <button type="submit">Process Document</button>
+            </div>
+        </form>
+    </div>
+
+    <div class="container">
+        <h2>Extraction Results</h2>
+        
+        <div id="results-container">
+            <div class="tabs">
+                <div class="tab active" data-tab="raw-ocr">Raw OCR</div>
+                <div class="tab" data-tab="structured-data">Structured Data</div>
+            </div>
+            
+            <div class="tab-content active" id="raw-ocr-content">
+                <div id="result" class="result">No document processed yet.</div>
+            </div>
+            
+            <div class="tab-content" id="structured-data-content">
+                <div id="structured-result" class="result">
+                    <p>No structured data available. Enable "Extract structured data" option when uploading.</p>
+                </div>
+                <div id="structured-display" class="structured-data"></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Tab switching functionality
+        document.querySelectorAll('.tab').forEach(tab => {
+            tab.addEventListener('click', () => {
+                // Remove active class from all tabs and contents
+                document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+                document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+                
+                // Add active class to clicked tab
+                tab.classList.add('active');
+                
+                // Show corresponding content
+                const tabId = tab.getAttribute('data-tab');
+                document.getElementById(`${tabId}-content`).classList.add('active');
+            });
+        });
+        
+        // Form submission
+        document.getElementById('upload-form').addEventListener('submit', async (event) => {
+            event.preventDefault();
+            
+            const resultDiv = document.getElementById('result');
+            const structuredDiv = document.getElementById('structured-result');
+            const structuredDisplay = document.getElementById('structured-display');
+            
+            resultDiv.innerHTML = 'Processing...';
+            structuredDiv.innerHTML = 'Processing...';
+            resultDiv.classList.remove('error');
+            structuredDiv.classList.remove('error');
+            structuredDisplay.innerHTML = '';
+            
+            const formData = new FormData();
+            const fileInput = document.getElementById('document');
+            const structuredCheckbox = document.getElementById('structured');
+            
+            formData.append('file', fileInput.files[0]);
+            
+            try {
+                const url = '/api/extract' + (structuredCheckbox.checked ? '?structured=true' : '');
+                const response = await fetch(url, {
+                    method: 'POST',
+                    body: formData,
+                });
+                
+                if (!response.ok) {
+                    const error = await response.json();
+                    throw new Error(error.detail || 'Error processing document');
+                }
+                
+                const data = await response.json();
+                
+                // Show raw OCR results
+                if (data.results) {
+                    resultDiv.innerHTML = JSON.stringify(data.results, null, 2);
+                } else if (data.ocr_results) {
+                    resultDiv.innerHTML = JSON.stringify(data.ocr_results, null, 2);
+                }
+                
+                // Show structured data if available
+                if (data.structured_data) {
+                    structuredDiv.innerHTML = JSON.stringify(data.structured_data, null, 2);
+                    
+                    // Display structured data in a more user-friendly format
+                    structuredDisplay.innerHTML = '';
+                    Object.entries(data.structured_data).forEach(([key, value]) => {
+                        if (value && typeof value !== 'object') {
+                            const fieldDiv = document.createElement('div');
+                            fieldDiv.className = 'field';
+                            fieldDiv.innerHTML = `<strong>${key}:</strong> ${value}`;
+                            structuredDisplay.appendChild(fieldDiv);
+                        }
+                    });
+                    
+                    // Activate the structured data tab
+                    document.querySelector('.tab[data-tab="structured-data"]').click();
+                }
+            } catch (error) {
+                resultDiv.innerHTML = `Error: ${error.message}`;
+                structuredDiv.innerHTML = `Error: ${error.message}`;
+                resultDiv.classList.add('error');
+                structuredDiv.classList.add('error');
+            }
+        });
+    </script>
+</body>
+</html>

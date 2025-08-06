@@ -1,0 +1,530 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Document Extractor & KYC Verification Agent</title>
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Alpine.js -->
+    <script defer src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js"></script>
+    
+    <!-- Font Awesome for icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    
+    <style>
+        .drag-over {
+            border-color: #3b82f6 !important;
+            background-color: #eff6ff !important;
+        }
+        .processing {
+            animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+        }
+        .fade-in {
+            animation: fadeIn 0.5s ease-in-out;
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+    </style>
+</head>
+<body class="bg-gray-50 min-h-screen" x-data="documentExtractor()">
+    <!-- Header -->
+    <header class="bg-white shadow-sm border-b border-gray-200">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex justify-between items-center py-6">
+                <div class="flex items-center">
+                    <i class="fas fa-file-alt text-blue-600 text-2xl mr-3"></i>
+                    <h1 class="text-2xl font-bold text-gray-900">Document Extractor & KYC Agent</h1>
+                </div>
+                <div class="flex items-center space-x-4">
+                    <span class="text-sm text-gray-500">Professional Document Processing</span>
+                    <div class="w-3 h-3 bg-green-500 rounded-full animate-pulse"></div>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <!-- Upload Section -->
+        <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-8">
+            <h2 class="text-xl font-semibold text-gray-900 mb-6 flex items-center">
+                <i class="fas fa-upload text-blue-600 mr-3"></i>
+                Document Upload
+            </h2>
+            
+            <!-- File Drop Zone -->
+            <div 
+                class="border-2 border-dashed border-gray-300 rounded-lg p-8 text-center transition-all duration-200 hover:border-blue-400 hover:bg-blue-50"
+                :class="{ 'drag-over': isDragOver }"
+                @dragover.prevent="isDragOver = true"
+                @dragleave.prevent="isDragOver = false"
+                @drop.prevent="handleFileDrop"
+            >
+                <div x-show="!selectedFile" class="space-y-4">
+                    <i class="fas fa-cloud-upload-alt text-4xl text-gray-400"></i>
+                    <div>
+                        <p class="text-lg font-medium text-gray-700">Drop your document here</p>
+                        <p class="text-sm text-gray-500 mt-1">or click to browse files</p>
+                    </div>
+                    <div class="flex justify-center">
+                        <label class="bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700 cursor-pointer transition-colors">
+                            <i class="fas fa-folder-open mr-2"></i>
+                            Choose File
+                            <input type="file" class="hidden" @change="handleFileSelect" accept=".pdf,.jpg,.jpeg,.png">
+                        </label>
+                    </div>
+                    <p class="text-xs text-gray-400">Supports: PDF, JPG, JPEG, PNG</p>
+                </div>
+                
+                <!-- Selected File Preview -->
+                <div x-show="selectedFile" class="space-y-4 fade-in">
+                    <div class="flex items-center justify-center space-x-4">
+                        <i class="fas fa-file text-3xl text-blue-600"></i>
+                        <div class="text-left">
+                            <p class="font-medium text-gray-900" x-text="selectedFile?.name"></p>
+                            <p class="text-sm text-gray-500" x-text="formatFileSize(selectedFile?.size)"></p>
+                        </div>
+                    </div>
+                    <button 
+                        @click="clearFile"
+                        class="text-red-600 hover:text-red-800 text-sm font-medium"
+                    >
+                        <i class="fas fa-times mr-1"></i>
+                        Remove
+                    </button>
+                </div>
+            </div>
+
+            <!-- Processing Options -->
+            <div x-show="selectedFile" class="mt-6 space-y-4 fade-in">
+                <div class="flex items-center space-x-6">
+                    <label class="flex items-center">
+                        <input 
+                            type="checkbox" 
+                            x-model="extractStructured"
+                            class="rounded border-gray-300 text-blue-600 shadow-sm focus:border-blue-300 focus:ring focus:ring-blue-200 focus:ring-opacity-50"
+                        >
+                        <span class="ml-2 text-sm font-medium text-gray-700">
+                            Extract Structured Data
+                            <span class="text-gray-500">(Recommended for KYC documents)</span>
+                        </span>
+                    </label>
+
+                    <!-- DEBUG MODE TOGGLE - COMMENTED OUT BY DEFAULT
+                    
+                    INSTRUCTIONS TO ENABLE DEBUG MODE:
+                    1. Uncomment this checkbox (remove the comment tags)
+                    2. Uncomment the debugMode property in the JavaScript data section (line ~387)
+                    3. Uncomment the debug code in processDocument function (line ~440-476)
+                    4. Reload the page
+                    
+                    WHEN TO USE DEBUG MODE:
+                    - When troubleshooting extraction issues
+                    - When analyzing document processing results
+                    - When integrating with third-party systems that need all fields
+                    - For data analysis and research
+                    
+                    <label class="flex items-center">
+                        <input 
+                            type="checkbox" 
+                            x-model="debugMode"
+                            class="rounded border-gray-300 text-orange-600 shadow-sm focus:border-orange-300 focus:ring focus:ring-orange-200 focus:ring-opacity-50"
+                        >
+                        <span class="ml-2 text-sm font-medium text-gray-700">
+                            Debug Mode
+                            <span class="text-orange-600">(Include raw data for analysis)</span>
+                        </span>
+                    </label>
+                    -->
+                </div>
+                
+                <!-- Process Button -->
+                <div class="flex justify-center">
+                    <button 
+                        @click="processDocument"
+                        :disabled="isProcessing"
+                        class="bg-green-600 text-white px-8 py-3 rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 font-medium"
+                        :class="{ 'processing': isProcessing }"
+                    >
+                        <i class="fas fa-cog mr-2" :class="{ 'fa-spin': isProcessing }"></i>
+                        <span x-show="!isProcessing">Process Document</span>
+                        <span x-show="isProcessing">Processing...</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Progress Bar -->
+            <div x-show="isProcessing" class="mt-6 fade-in">
+                <div class="bg-gray-200 rounded-full h-2">
+                    <div class="bg-blue-600 h-2 rounded-full transition-all duration-500" :style="`width: ${progress}%`"></div>
+                </div>
+                <p class="text-sm text-gray-600 mt-2 text-center" x-text="progressMessage"></p>
+            </div>
+        </div>
+
+        <!-- Results Section -->
+        <div x-show="results" class="space-y-6 fade-in">
+            <!-- Results Header -->
+            <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+                <h2 class="text-xl font-semibold text-gray-900 mb-4 flex items-center">
+                    <i class="fas fa-chart-line text-green-600 mr-3"></i>
+                    Extraction Results
+                </h2>
+                
+                <!-- Extraction Method Badge -->
+                <div class="flex items-center space-x-4 mb-4">
+                    <span 
+                        class="px-3 py-1 rounded-full text-sm font-medium"
+                        :class="getExtractionMethodBadge(results?.extraction_method)"
+                        x-text="getDisplayExtractionMethod(results?.extraction_method)"
+                    ></span>
+                    <span class="text-sm text-gray-500">Processing completed successfully</span>
+                </div>
+
+                <!-- Tab Navigation -->
+                <div class="border-b border-gray-200">
+                    <nav class="flex space-x-8">
+                        <button 
+                            @click="activeTab = 'structured'"
+                            class="py-2 px-1 border-b-2 font-medium text-sm transition-colors"
+                            :class="activeTab === 'structured' ? 'border-blue-500 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'"
+                        >
+                            <i class="fas fa-table mr-2"></i>
+                            Structured Data
+                        </button>
+                        <button 
+                            @click="activeTab = 'raw'"
+                            class="py-2 px-1 border-b-2 font-medium text-sm transition-colors"
+                            :class="activeTab === 'raw' ? 'border-blue-500 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'"
+                        >
+                            <i class="fas fa-code mr-2"></i>
+                            Raw OCR
+                        </button>
+                    </nav>
+                </div>
+            </div>
+
+            <!-- Structured Data View -->
+            <div x-show="activeTab === 'structured' && (results?.structured_data || results?.ocr_results)" class="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+                <h3 class="text-lg font-semibold text-gray-900 mb-4">Document Information</h3>
+                
+                <div x-show="results?.structured_data" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    <!-- Core Information -->
+                    <div class="space-y-4">
+                        <h4 class="font-medium text-gray-900 border-b pb-2">Core Information</h4>
+                        <div class="space-y-3">
+                            <div x-show="results.structured_data?.document_type">
+                                <label class="text-xs font-medium text-gray-500 uppercase tracking-wide">Document Type</label>
+                                <p class="mt-1 text-sm text-gray-900" x-text="results.structured_data?.document_type"></p>
+                            </div>
+                            <div x-show="results.structured_data?.document_number">
+                                <label class="text-xs font-medium text-gray-500 uppercase tracking-wide">Document Number</label>
+                                <p class="mt-1 text-sm text-gray-900 font-mono" x-text="results.structured_data?.document_number"></p>
+                            </div>
+                            <div x-show="results.structured_data?.country">
+                                <label class="text-xs font-medium text-gray-500 uppercase tracking-wide">Country</label>
+                                <p class="mt-1 text-sm text-gray-900" x-text="results.structured_data?.country"></p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Personal Information -->
+                    <div class="space-y-4">
+                        <h4 class="font-medium text-gray-900 border-b pb-2">Personal Information</h4>
+                        <div class="space-y-3">
+                            <div x-show="results.structured_data?.surname || results.structured_data?.given_names">
+                                <label class="text-xs font-medium text-gray-500 uppercase tracking-wide">Full Name</label>
+                                <p class="mt-1 text-sm text-gray-900">
+                                    <span x-text="results.structured_data?.given_names || ''"></span>
+                                    <span x-text="results.structured_data?.surname || ''"></span>
+                                </p>
+                            </div>
+                            <div x-show="results.structured_data?.date_of_birth">
+                                <label class="text-xs font-medium text-gray-500 uppercase tracking-wide">Date of Birth</label>
+                                <p class="mt-1 text-sm text-gray-900" x-text="results.structured_data?.date_of_birth"></p>
+                            </div>
+                            <div x-show="results.structured_data?.nationality">
+                                <label class="text-xs font-medium text-gray-500 uppercase tracking-wide">Nationality</label>
+                                <p class="mt-1 text-sm text-gray-900" x-text="results.structured_data?.nationality"></p>
+                            </div>
+                            <div x-show="results.structured_data?.sex">
+                                <label class="text-xs font-medium text-gray-500 uppercase tracking-wide">Gender</label>
+                                <p class="mt-1 text-sm text-gray-900" x-text="results.structured_data?.sex"></p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Document Dates -->
+                    <div class="space-y-4">
+                        <h4 class="font-medium text-gray-900 border-b pb-2">Document Validity</h4>
+                        <div class="space-y-3">
+                            <div x-show="results.structured_data?.date_of_issue">
+                                <label class="text-xs font-medium text-gray-500 uppercase tracking-wide">Issue Date</label>
+                                <p class="mt-1 text-sm text-gray-900" x-text="results.structured_data?.date_of_issue"></p>
+                            </div>
+                            <div x-show="results.structured_data?.date_of_expiry">
+                                <label class="text-xs font-medium text-gray-500 uppercase tracking-wide">Expiry Date</label>
+                                <p class="mt-1 text-sm text-gray-900" x-text="results.structured_data?.date_of_expiry"></p>
+                            </div>
+                            <div x-show="results.structured_data?.issuing_authority">
+                                <label class="text-xs font-medium text-gray-500 uppercase tracking-wide">Issuing Authority</label>
+                                <p class="mt-1 text-sm text-gray-900" x-text="results.structured_data?.issuing_authority"></p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Document-Specific Information -->
+                    <div class="space-y-4" x-show="results.structured_data?.passport_type || results.structured_data?.license_class || results.structured_data?.mrz_lines || results.structured_data?.vehicle_categories || results.structured_data?.nin">
+                        <h4 class="font-medium text-gray-900 border-b pb-2">Document-Specific Details</h4>
+                        <div class="space-y-3">
+                            <!-- International Passport-specific fields -->
+                            <div x-show="results.structured_data?.passport_type">
+                                <label class="text-xs font-medium text-gray-500 uppercase tracking-wide">International Passport Type</label>
+                                <p class="mt-1 text-sm text-gray-900" x-text="results.structured_data?.passport_type"></p>
+                            </div>
+                            <div x-show="results.structured_data?.nin">
+                                <label class="text-xs font-medium text-gray-500 uppercase tracking-wide">NIN</label>
+                                <p class="mt-1 text-sm text-gray-900 font-mono" x-text="results.structured_data?.nin"></p>
+                            </div>
+                            
+                            <!-- Driver's License specific fields -->
+                            <div x-show="results.structured_data?.license_class">
+                                <label class="text-xs font-medium text-gray-500 uppercase tracking-wide">License Class</label>
+                                <p class="mt-1 text-sm text-gray-900" x-text="results.structured_data?.license_class"></p>
+                            </div>
+                            <div x-show="results.structured_data?.vehicle_categories">
+                                <label class="text-xs font-medium text-gray-500 uppercase tracking-wide">Vehicle Categories</label>
+                                <p class="mt-1 text-sm text-gray-900" x-text="Array.isArray(results.structured_data?.vehicle_categories) ? results.structured_data.vehicle_categories.join(', ') : results.structured_data?.vehicle_categories"></p>
+                            </div>
+                            <div x-show="results.structured_data?.restrictions">
+                                <label class="text-xs font-medium text-gray-500 uppercase tracking-wide">Restrictions</label>
+                                <p class="mt-1 text-sm text-gray-900" x-text="results.structured_data?.restrictions"></p>
+                            </div>
+                            
+                            <!-- MRZ Lines (for international passports) -->
+                            <div x-show="results.structured_data?.mrz_lines">
+                                <label class="text-xs font-medium text-gray-500 uppercase tracking-wide">MRZ Lines</label>
+                                <div class="mt-1 bg-gray-50 p-2 rounded border font-mono text-xs">
+                                    <template x-for="line in results.structured_data?.mrz_lines || []">
+                                        <div x-text="line" class="break-all"></div>
+                                    </template>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Show message when no structured data -->
+                <div x-show="!results?.structured_data" class="text-center py-8">
+                    <i class="fas fa-info-circle text-blue-500 text-2xl mb-3"></i>
+                    <p class="text-gray-600">No structured data available. Try enabling "Extract Structured Data" option.</p>
+                </div>
+
+                <!-- Raw JSON View -->
+                <div x-show="results?.structured_data" class="mt-6">
+                    <button 
+                        @click="showRawJson = !showRawJson"
+                        class="text-blue-600 hover:text-blue-800 text-sm font-medium"
+                    >
+                        <i class="fas fa-code mr-1"></i>
+                        <span x-show="!showRawJson">Show Raw JSON</span>
+                        <span x-show="showRawJson">Hide Raw JSON</span>
+                    </button>
+                    <div x-show="showRawJson" class="mt-3">
+                        <pre class="bg-gray-100 p-4 rounded-lg text-xs overflow-x-auto" x-text="JSON.stringify(results.structured_data, null, 2)"></pre>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Raw OCR View -->
+            <div x-show="activeTab === 'raw' && (results?.results || results?.ocr_results)" class="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+                <h3 class="text-lg font-semibold text-gray-900 mb-4">Raw OCR Results</h3>
+                <div class="bg-gray-100 p-4 rounded-lg max-h-96 overflow-y-auto">
+                    <template x-for="(item, index) in (results?.results || results?.ocr_results || [])" :key="index">
+                        <div class="mb-3 p-3 bg-white rounded border-l-4 border-blue-500">
+                            <div class="flex justify-between items-start">
+                                <p class="text-sm text-gray-900 font-medium" x-text="item.text"></p>
+                                <span class="text-xs text-gray-500 ml-2" x-text="'Confidence: ' + Math.round((item.confidence || 0) * 100) + '%'"></span>
+                            </div>
+                        </div>
+                    </template>
+                </div>
+            </div>
+        </div>
+
+        <!-- Error Display -->
+        <div x-show="error" class="bg-red-50 border border-red-200 rounded-lg p-4 fade-in">
+            <div class="flex">
+                <i class="fas fa-exclamation-triangle text-red-400 mr-3 mt-1"></i>
+                <div>
+                    <h3 class="text-sm font-medium text-red-800">Processing Error</h3>
+                    <p class="mt-1 text-sm text-red-700" x-text="error"></p>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <script>
+        function documentExtractor() {
+            return {
+                selectedFile: null,
+                isDragOver: false,
+                isProcessing: false,
+                extractStructured: true,
+                progress: 0,
+                progressMessage: '',
+                results: null,
+                error: null,
+                activeTab: 'structured',
+                showRawJson: false,
+                // debugMode: false,  // 🔧 UNCOMMENT: Enable debug mode for development and integration
+
+                handleFileDrop(event) {
+                    this.isDragOver = false;
+                    const files = event.dataTransfer.files;
+                    if (files.length > 0) {
+                        this.selectFile(files[0]);
+                    }
+                },
+
+                handleFileSelect(event) {
+                    const file = event.target.files[0];
+                    if (file) {
+                        this.selectFile(file);
+                    }
+                },
+
+                selectFile(file) {
+                    const allowedTypes = ['application/pdf', 'image/jpeg', 'image/jpg', 'image/png'];
+                    if (!allowedTypes.includes(file.type)) {
+                        this.error = 'Please select a valid file type (PDF, JPG, PNG)';
+                        return;
+                    }
+                    
+                    this.selectedFile = file;
+                    this.error = null;
+                    this.results = null;
+                },
+
+                clearFile() {
+                    this.selectedFile = null;
+                    this.results = null;
+                    this.error = null;
+                },
+
+                formatFileSize(bytes) {
+                    if (!bytes) return '';
+                    const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+                    const i = Math.floor(Math.log(bytes) / Math.log(1024));
+                    return Math.round(bytes / Math.pow(1024, i) * 100) / 100 + ' ' + sizes[i];
+                },
+
+                async processDocument() {
+                    if (!this.selectedFile) return;
+
+                    this.isProcessing = true;
+                    this.error = null;
+                    this.results = null;
+                    this.progress = 0;
+                    this.progressMessage = 'Uploading document...';
+
+                    try {
+                        const formData = new FormData();
+                        formData.append('file', this.selectedFile);
+
+                        const endpoint = this.extractStructured ? 
+                            '/api/extract?structured=true' : 
+                            '/api/extract';
+                        
+                        // 🔧 DEBUG MODE: Uncomment below for raw data access during development
+                        // const debugParams = this.debugMode ? '&include_raw=true' : '';
+                        // const endpoint = this.extractStructured ? 
+                        //     `/api/extract?structured=true${debugParams}` : 
+                        //     `/api/extract${this.debugMode ? '?include_raw=true' : ''}`;
+
+                        this.progress = 30;
+                        this.progressMessage = 'Processing with OCR...';
+
+                        const response = await fetch(endpoint, {
+                            method: 'POST',
+                            body: formData
+                        });
+
+                        this.progress = 70;
+                        this.progressMessage = 'Analyzing results...';
+
+                        if (!response.ok) {
+                            const errorData = await response.json();
+                            throw new Error(errorData.detail || 'Processing failed');
+                        }
+
+                        const data = await response.json();
+                        
+                        // 🔧 DEBUG MODE: Uncomment below for detailed response logging
+                        // if (this.debugMode) {
+                        //     console.log('🔍 Debug Mode - Full API Response:', data);
+                        //     if (data.raw_extraction_data) {
+                        //         console.log('📊 Raw Extraction Data:', data.raw_extraction_data);
+                        //         console.log('🤖 Extraction Method:', data.raw_extraction_data.extraction_method);
+                        //         console.log('⚙️ Processing Details:', data.raw_extraction_data.processing_details);
+                        //     }
+                        // }
+                        
+                        this.progress = 100;
+                        this.progressMessage = 'Complete!';
+                        
+                        setTimeout(() => {
+                            this.results = data;
+                            this.isProcessing = false;
+                        }, 500);
+
+                    } catch (err) {
+                        this.error = err.message;
+                        this.isProcessing = false;
+                        this.progress = 0;
+                    }
+                },
+
+                getExtractionMethodBadge(method) {
+                    if (!method) return 'bg-gray-100 text-gray-800';
+                    
+                    // Handle new detailed extraction methods
+                    if (method.includes('OCR+LLM') || method.includes('Kimi-K2')) {
+                        return 'bg-green-100 text-green-800';
+                    }
+                    if (method.includes('Vision LLM') || method.includes('Llama-4-Scout')) {
+                        return 'bg-purple-100 text-purple-800';
+                    }
+                    
+                    // Fallback for basic methods
+                    const badges = {
+                        'OCR': 'bg-blue-100 text-blue-800',
+                        'LLM': 'bg-purple-100 text-purple-800'
+                    };
+                    return badges[method] || 'bg-gray-100 text-gray-800';
+                },
+
+                getDisplayExtractionMethod(method) {
+                    if (!method) return 'OCR';
+                    
+                    // Clean up display names for better UX
+                    if (method.includes('OCR+LLM') && method.includes('Kimi-K2')) {
+                        return 'OCR + AI (Kimi-K2)';
+                    }
+                    if (method.includes('Vision LLM') && method.includes('Llama-4-Scout')) {
+                        return 'AI Vision (Llama-4-Scout)';
+                    }
+                    
+                    // Fallback to original method name
+                    return method;
+                }
+            }
+        }
+    </script>
+</body>
+</html>
