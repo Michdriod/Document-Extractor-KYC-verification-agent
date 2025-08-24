@@ -1,16 +1,19 @@
 # Document Extractor & KYC Verification Agent
 
-A production-ready Python system for intelligent document processing and KYC verification that combines OCR technology with AI-powered extraction. Features dual AI processing with **OCR+Text AI (Kimi-K2) primary** and **Vision AI (Llama-4-Scout) fallback** for comprehensive document analysis.
+A production-ready Python system for intelligent document processing and KYC verification that combines OCR technology with AI-powered extraction. Features dual AI processing with **OCR+Text AI (Kimi-K2) primary** and **Vision AI (Llama-4-Scout) fallback** for comprehensive document analysis, along with advanced semantic field understanding and categorization.
 
 ## 🚀 Key Features
 
 - **Dual AI Processing**: OCR+Text AI (Kimi-K2) primary with Vision AI (Llama-4-Scout) fallback
 - **Multi-Document Support**: 15+ document types including international passports, IDs, licenses, and certificates
 - **Intelligent Field Filtering**: Document-specific field extraction with relevance-based filtering
+- **Semantic Field Understanding**: Automatic categorization of fields into meaningful groups with relationship detection
+- **Field Name Normalization**: Consistent naming conventions across document types
 - **Production-Ready API**: FastAPI with comprehensive error handling and validation
 - **Modern Web Interface**: Responsive UI with real-time processing feedback
 - **Debug Mode**: Optional raw data access for development and integration
 - **JSON Schema Validation**: Type-safe data extraction with built-in validation
+- **[Advanced Field Processing](docs/field_processing.md)**: Semantic field categorization and normalization
 
 ## 🎯 Project Overview
 

@@ -1,0 +1,243 @@
+```json
+{
+  "documents": [
+    {
+      "document_type": "passport",
+      "extraction_status": "success",
+      "extraction_method": "text_ai",
+      "data": {
+        "document_type": {
+          "value": "Passport",
+          "confidence": 0.97
+        },
+        "issuing_country": {
+          "value": "United States of America",
+          "confidence": 0.95
+        },
+        "document_number": {
+          "value": "555123456",
+          "confidence": 0.96
+        },
+        "full_name": {
+          "value": "John Robert Smith",
+          "confidence": 0.98
+        },
+        "date_of_birth": {
+          "value": "15 May 1985",
+          "confidence": 0.94
+        },
+        "issue_date": {
+          "value": "10 Jan 2018",
+          "confidence": 0.93
+        },
+        "expiration_date": {
+          "value": "09 Jan 2028",
+          "confidence": 0.93
+        },
+        "nationality": {
+          "value": "United States of America",
+          "confidence": 0.91
+        },
+        "sex": {
+          "value": "M",
+          "confidence": 0.99
+        },
+        "place_of_birth": {
+          "value": "Chicago, IL",
+          "confidence": 0.87
+        },
+        "fields": {
+          "document_type": {
+            "value": "Passport",
+            "confidence": 0.97
+          },
+          "issuing_country": {
+            "value": "United States of America",
+            "confidence": 0.95
+          },
+          "document_number": {
+            "value": "555123456",
+            "confidence": 0.96
+          },
+          "full_name": {
+            "value": "John Robert Smith",
+            "confidence": 0.98
+          },
+          "first_name": {
+            "value": "John",
+            "confidence": 0.98
+          },
+          "middle_name": {
+            "value": "Robert",
+            "confidence": 0.95
+          },
+          "last_name": {
+            "value": "Smith",
+            "confidence": 0.98
+          },
+          "date_of_birth": {
+            "value": "15 May 1985",
+            "confidence": 0.94
+          },
+          "issue_date": {
+            "value": "10 Jan 2018",
+            "confidence": 0.93
+          },
+          "expiration_date": {
+            "value": "09 Jan 2028",
+            "confidence": 0.93
+          },
+          "nationality": {
+            "value": "United States of America",
+            "confidence": 0.91
+          },
+          "sex": {
+            "value": "M",
+            "confidence": 0.99
+          },
+          "place_of_birth": {
+            "value": "Chicago, IL",
+            "confidence": 0.87
+          },
+          "authority": {
+            "value": "Department of State",
+            "confidence": 0.85
+          },
+          "mrz_line1": {
+            "value": "P<USASMITH<<JOHN<ROBERT<<<<<<<<<<<<<<<<<<<<<",
+            "confidence": 0.92
+          },
+          "mrz_line2": {
+            "value": "5551234560USA8505153M2801099<<<<<<<<<<<<<<06",
+            "confidence": 0.91
+          }
+        },
+        "categorized_fields": {
+          "personal_information": {
+            "full_name": {
+              "value": "John Robert Smith",
+              "confidence": 0.98
+            },
+            "first_name": {
+              "value": "John",
+              "confidence": 0.98
+            },
+            "middle_name": {
+              "value": "Robert",
+              "confidence": 0.95
+            },
+            "last_name": {
+              "value": "Smith",
+              "confidence": 0.98
+            },
+            "date_of_birth": {
+              "value": "15 May 1985",
+              "confidence": 0.94
+            },
+            "sex": {
+              "value": "M",
+              "confidence": 0.99
+            },
+            "place_of_birth": {
+              "value": "Chicago, IL",
+              "confidence": 0.87
+            },
+            "nationality": {
+              "value": "United States of America",
+              "confidence": 0.91
+            }
+          },
+          "identification_documents": {
+            "document_number": {
+              "value": "555123456",
+              "confidence": 0.96
+            }
+          },
+          "document_information": {
+            "document_type": {
+              "value": "Passport",
+              "confidence": 0.97
+            },
+            "issuing_country": {
+              "value": "United States of America",
+              "confidence": 0.95
+            },
+            "authority": {
+              "value": "Department of State",
+              "confidence": 0.85
+            },
+            "mrz_line1": {
+              "value": "P<USASMITH<<JOHN<ROBERT<<<<<<<<<<<<<<<<<<<<<",
+              "confidence": 0.92
+            },
+            "mrz_line2": {
+              "value": "5551234560USA8505153M2801099<<<<<<<<<<<<<<06",
+              "confidence": 0.91
+            }
+          },
+          "important_dates": {
+            "issue_date": {
+              "value": "10 Jan 2018",
+              "confidence": 0.93
+            },
+            "expiration_date": {
+              "value": "09 Jan 2028",
+              "confidence": 0.93
+            }
+          }
+        },
+        "primary_fields": {
+          "full_name": {
+            "value": "John Robert Smith",
+            "confidence": 0.98
+          },
+          "document_number": {
+            "value": "555123456",
+            "confidence": 0.96
+          },
+          "date_of_birth": {
+            "value": "15 May 1985",
+            "confidence": 0.94
+          },
+          "document_type": {
+            "value": "Passport",
+            "confidence": 0.97
+          },
+          "expiration_date": {
+            "value": "09 Jan 2028",
+            "confidence": 0.93
+          }
+        },
+        "related_fields": [
+          {
+            "field1": "first_name",
+            "field2": "last_name",
+            "score": 0.9
+          },
+          {
+            "field1": "first_name",
+            "field2": "middle_name",
+            "score": 0.8
+          },
+          {
+            "field1": "middle_name",
+            "field2": "last_name",
+            "score": 0.8
+          },
+          {
+            "field1": "issue_date",
+            "field2": "expiration_date",
+            "score": 0.9
+          }
+        ]
+      }
+    }
+  ],
+  "metadata": {
+    "processing_time_ms": 1245,
+    "document_count": 1,
+    "filename": "passport.jpg",
+    "ocr_text_length": 851
+  }
+}
+```

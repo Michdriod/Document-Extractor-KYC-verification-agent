@@ -5,6 +5,7 @@ from fastapi.responses import HTMLResponse
 import uvicorn
 
 from app.api.endpoints import document_router
+from app.api.enhanced_endpoints import enhanced_router
 
 app = FastAPI(
     title="Document Extractor & KYC Verification Agent",
@@ -17,6 +18,7 @@ app.mount("/static", StaticFiles(directory="static"), name="static")
 
 # Include routers
 app.include_router(document_router, prefix="/api")
+app.include_router(enhanced_router, prefix="/api")
 
 # Templates
 templates = Jinja2Templates(directory="templates")
@@ -24,7 +26,12 @@ templates = Jinja2Templates(directory="templates")
 @app.get("/", response_class=HTMLResponse)
 async def index(request: Request):
     """Serve the index HTML page"""
-    return templates.TemplateResponse("index_new.html", {"request": request})
+    return templates.TemplateResponse("index_new_updated.html", {"request": request})
+
+@app.get("/updated", response_class=HTMLResponse)
+async def index_updated(request: Request):
+    """Serve the updated index HTML page with Google Drive URL support"""
+    return templates.TemplateResponse("index_new_updated.html", {"request": request})
 
 if __name__ == "__main__":
     uvicorn.run("app.main:app", host="0.0.0.0", port=8000, reload=True)
