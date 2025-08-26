@@ -87,10 +87,10 @@
                     <input 
                         type="text" 
                         x-model="documentUrl"
-                        placeholder="https://example.com/document.pdf or Google Drive URL"
+                        placeholder="https://example.com/document.pdf"
                         class="w-full px-4 py-2 border rounded focus:outline-none focus:ring focus:border-blue-300"
                     >
-                    <p class="text-xs text-gray-500">Supports: Standard image/PDF URLs and Google Drive links</p>
+                    <p class="text-xs text-gray-500">Supports: Standard image/PDF HTTPS URLs</p>
                     <label class="block text-sm font-medium text-gray-700 mt-2">Or enter a local file path:</label>
                     <input 
                         type="text" 
@@ -486,7 +486,7 @@
                             return;
                         }
                     }
-                    // URL validation - UPDATED to support Google Drive URLs and other URLs
+                    // URL validation - UPDATED to support HTTPS document URLs
                     if (this.documentUrl) {
                         // Accept any URL that looks legitimate
                         const validUrlPattern = /^https?:\/\/.+/i;
@@ -567,7 +567,7 @@
                     if (method.includes('OCR+LLM') || method.includes('Kimi-K2')) {
                         return 'bg-green-100 text-green-800';
                     }
-                    if (method.includes('Vision LLM') || method.includes('Llama-4-Scout')) {
+                    if (method.includes('Vision LLM') || method.includes('meta-llama/llama-4-scout-17b-16e-instruct')) {
                         return 'bg-purple-100 text-purple-800';
                     }
                     // Fallback for basic methods

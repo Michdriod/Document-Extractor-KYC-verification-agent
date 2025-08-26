@@ -6,12 +6,10 @@ import json
 from typing import Dict, Any, List, Optional, Tuple, Union
 import io
 import re
-from PIL import Image
 import requests
 from dotenv import load_dotenv
 from groq import Groq
 from pdf2image import convert_from_bytes
-import zipfile
 
 from app.models.document_data import DocumentData, FieldWithConfidence
 from app.services.document_type_detector import DocumentTypeDetector
@@ -19,7 +17,7 @@ from app.services.confidence_filter import filter_low_confidence_fields
 from app.services.field_verifier import verify_extracted_fields
 
 
-from pdf2image import convert_from_bytes  # Make sure this is in your requirements!
+# pdf2image.convert_from_bytes is used for PDF -> image conversion
 
 # --- Extra fields cleaning helpers (conservative, non-invasive) ---
 
@@ -442,104 +440,16 @@ def get_image_bytes_from_input(input_source: Union[bytes, str]) -> bytes:
     If input is a URL, downloads and returns image bytes.
     If PDF, extracts the first page as an image.
     If file path, reads and returns bytes.
-    Supports special URLs like Google Drive links and other non-standard URLs.
+    Supports HTTP(S) URLs and local file paths. (Google Drive special handling removed)
     """
     if isinstance(input_source, bytes):
         return input_source
 
     if isinstance(input_source, str):
-        # Handle Google Drive URLs
-        if "drive.google.com" in input_source or "docs.google.com" in input_source:
-            print("📄 Detected Google Drive URL, converting to direct download link...")
-            
-            # Extract file ID from various Google Drive URL formats
-            file_id_match = re.search(r"file/d/([^/]+)", input_source)
-            if file_id_match:
-                file_id = file_id_match.group(1)
-                # Convert to direct download link
-                direct_url = f"https://drive.google.com/uc?export=download&id={file_id}"
-                print(f"🔗 Using direct download URL: {direct_url}")
-                response = requests.get(direct_url, stream=True)
-                
-                # Check if we're hitting the Google Drive download warning
-                if "Content-Disposition" not in response.headers:
-                    # This is likely a large file requiring confirmation
-                    print("⚠️ Large file detected, handling Google Drive confirmation page...")
-                    # Extract confirmation token
-                    for cookie in response.cookies:
-                        if cookie.name == 'download_warning':
-                            confirm_token = cookie.value
-                            # Use token to bypass confirmation
-                            direct_url = f"https://drive.google.com/uc?export=download&id={file_id}&confirm={confirm_token}"
-                            print(f"🔗 Using confirmed download URL: {direct_url}")
-                            response = requests.get(direct_url)
-                            break
-            else:
-                try:
-                    # Try alternative Google Drive URL formats
-                    if "open?id=" in input_source:
-                        file_id = input_source.split("open?id=")[1].split("&")[0]
-                    elif "/view" in input_source:
-                        file_id = input_source.split("/")[5]
-                    else:
-                        raise ValueError("Could not extract file ID from Google Drive URL")
-                    
-                    direct_url = f"https://drive.google.com/uc?export=download&id={file_id}"
-                    print(f"🔗 Using direct download URL: {direct_url}")
-                    response = requests.get(direct_url, stream=True)
-                except Exception as e:
-                    raise ValueError(f"Invalid Google Drive URL format: {str(e)}")
-                
-            if response.status_code != 200:
-                raise ValueError(f"Failed to download file from Google Drive. Status code: {response.status_code}")
-                
-            content_type = response.headers.get("Content-Type", "")
-            print(f"📊 Content type detected: {content_type}")
-            
-            # Process based on content type, even without file extension
-            if "pdf" in content_type.lower() or input_source.lower().endswith(".pdf"):
-                # Convert first page of PDF to image bytes
-                print("📄 Converting PDF to image...")
-                try:
-                    images = convert_from_bytes(response.content, first_page=1, last_page=1)
-                    img_byte_arr = io.BytesIO()
-                    img = images[0]
-                    if img.mode == 'RGBA':
-                        img = img.convert('RGB')
-                    img.save(img_byte_arr, format='JPEG')
-                    return img_byte_arr.getvalue()
-                except Exception as e:
-                    raise ValueError(f"Error converting PDF to image: {str(e)}")
-            elif any(img_type in content_type.lower() for img_type in ["image/jpeg", "image/jpg", "image/png"]):
-                # Process as image
-                print("🖼️ Processing as image...")
-                return response.content
-            else:
-                # Try to detect content type based on binary signature
-                try:
-                    print("🔍 Attempting to detect content type from binary data...")
-                    if response.content.startswith(b'%PDF'):
-                        print("📄 Detected PDF signature, converting to image...")
-                        images = convert_from_bytes(response.content, first_page=1, last_page=1)
-                        img_byte_arr = io.BytesIO()
-                        img = images[0]
-                        if img.mode == 'RGBA':
-                            img = img.convert('RGB')
-                        img.save(img_byte_arr, format='JPEG')
-                        return img_byte_arr.getvalue()
-                    elif response.content.startswith(b'\xff\xd8\xff'):
-                        print("🖼️ Detected JPEG signature, processing as image...")
-                        return response.content
-                    elif response.content.startswith(b'\x89PNG\r\n\x1a\n'):
-                        print("🖼️ Detected PNG signature, processing as image...")
-                        return response.content
-                    else:
-                        raise ValueError(f"Unsupported file format from Google Drive. Content type: {content_type}")
-                except Exception as e:
-                    raise ValueError(f"Failed to process content from Google Drive: {str(e)}")
-                
+        # Note: Google Drive-specific handling removed. Use standard HTTP(S) handling below.
+
         # Handle standard URLs
-        elif input_source.startswith("http"):
+        if input_source.startswith("http"):
             print(f"🔗 Downloading from URL: {input_source[:60]}...")
             try:
                 response = requests.get(input_source)
@@ -627,10 +537,6 @@ load_dotenv()
 
 # Get environment variables
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
-OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
-OPENROUTER_REFERER = os.getenv("OPENROUTER_REFERER", "http://localhost:8000")
-OPENROUTER_TITLE = os.getenv("OPENROUTER_TITLE", "Document Extractor KYC")
 
 class VisionLLMExtractor:
     """Class to extract document data directly from images using Vision LLM"""
@@ -688,47 +594,47 @@ class VisionLLMExtractor:
         
         guidance_templates = {
             "land_use_restriction_agreement": """
-📋 LAND USE RESTRICTION AGREEMENT EXTRACTION:
-- Focus Fields: Extract parties (grantor, grantee), property details, restrictions, dates, duration
-- Key Extra Fields: 'grantor_name', 'grantor_address', 'grantee_name', 'grantee_address', 'property_location', 'property_description', 'restrictions_list', 'agreement_duration', 'effective_date', 'termination_conditions'
-- Look for: Party names and addresses, property location and description, specific restrictions (commercial use, building height, tree removal, etc.), duration/term of restrictions, effective dates
+            📋 LAND USE RESTRICTION AGREEMENT EXTRACTION:
+            - Focus Fields: Extract parties (grantor, grantee), property details, restrictions, dates, duration
+            - Key Extra Fields: 'grantor_name', 'grantor_address', 'grantee_name', 'grantee_address', 'property_location', 'property_description', 'restrictions_list', 'agreement_duration', 'effective_date', 'termination_conditions'
+            - Look for: Party names and addresses, property location and description, specific restrictions (commercial use, building height, tree removal, etc.), duration/term of restrictions, effective dates
             """,
             
             "contract": """
-📋 CONTRACT/AGREEMENT EXTRACTION:
-- Focus Fields: Extract contracting parties, contract terms, dates, obligations
-- Key Extra Fields: 'contracting_party_1', 'contracting_party_2', 'contract_purpose', 'terms_and_conditions', 'obligations', 'payment_terms', 'duration', 'termination_clauses'
-- Look for: Party details, contract purpose, specific terms and conditions, payment obligations, duration, termination provisions
+            📋 CONTRACT/AGREEMENT EXTRACTION:
+            - Focus Fields: Extract contracting parties, contract terms, dates, obligations
+            - Key Extra Fields: 'contracting_party_1', 'contracting_party_2', 'contract_purpose', 'terms_and_conditions', 'obligations', 'payment_terms', 'duration', 'termination_clauses'
+            - Look for: Party details, contract purpose, specific terms and conditions, payment obligations, duration, termination provisions
             """,
             
             "international_passport": """
-📋 PASSPORT EXTRACTION:
-- Focus Fields: surname, given_names, nationality, document_number, date_of_birth, date_of_expiry, issuing_authority
-- Key Extra Fields: 'passport_type', 'place_of_birth', 'mrz_line_1', 'mrz_line_2'
-- Look for: Personal details, document specifics, MRZ data if present
+            📋 PASSPORT EXTRACTION:
+            - Focus Fields: surname, given_names, nationality, document_number, date_of_birth, date_of_expiry, issuing_authority
+            - Key Extra Fields: 'passport_type', 'place_of_birth', 'mrz_line_1', 'mrz_line_2'
+            - Look for: Personal details, document specifics, MRZ data if present
             """,
             
             "invoice": """
-📋 INVOICE EXTRACTION:
-- Focus Fields: date_of_issue, document_number
-- Key Extra Fields: 'invoice_number', 'seller_name', 'seller_address', 'buyer_name', 'buyer_address', 'items_description', 'total_amount', 'tax_amount', 'payment_terms', 'due_date'
-- Look for: Invoice details, parties involved, itemized charges, amounts, payment information
+            📋 INVOICE EXTRACTION:
+            - Focus Fields: date_of_issue, document_number
+            - Key Extra Fields: 'invoice_number', 'seller_name', 'seller_address', 'buyer_name', 'buyer_address', 'items_description', 'total_amount', 'tax_amount', 'payment_terms', 'due_date'
+            - Look for: Invoice details, parties involved, itemized charges, amounts, payment information
             """,
             
             "certificate": """
-📋 CERTIFICATE EXTRACTION:
-- Focus Fields: date_of_issue, issuing_authority
-- Key Extra Fields: 'certificate_type', 'recipient_name', 'achievement_description', 'institution_name', 'qualification_level', 'grade_or_score', 'certificate_number'
-- Look for: Certificate type, recipient details, achievement/qualification, issuing institution, grades/scores
+            📋 CERTIFICATE EXTRACTION:
+            - Focus Fields: date_of_issue, issuing_authority
+            - Key Extra Fields: 'certificate_type', 'recipient_name', 'achievement_description', 'institution_name', 'qualification_level', 'grade_or_score', 'certificate_number'
+            - Look for: Certificate type, recipient details, achievement/qualification, issuing institution, grades/scores
             """
         }
         
         # Get specific guidance or use general approach
         return guidance_templates.get(doc_type, f"""
-📋 {doc_type.upper().replace('_', ' ')} EXTRACTION:
-- Focus Fields: {', '.join(strategy.get('focus_fields', ['date_of_issue']))}
-- Key Extra Fields: Look for document-specific meaningful content and create descriptive field names
-- Strategy: {strategy.get('extraction_priority', 'comprehensive')} extraction approach
+        📋 {doc_type.upper().replace('_', ' ')} EXTRACTION:
+        - Focus Fields: {', '.join(strategy.get('focus_fields', ['date_of_issue']))}
+        - Key Extra Fields: Look for document-specific meaningful content and create descriptive field names
+        - Strategy: {strategy.get('extraction_priority', 'comprehensive')} extraction approach
         """)
     
     def _generate_adaptive_user_prompt(self, ocr_text: str, doc_type: str, strategy: Dict[str, any]) -> str:
@@ -736,111 +642,111 @@ class VisionLLMExtractor:
         
         base_prompt = f"""ACCURATE DOCUMENT EXTRACTION FROM OCR TEXT:
 
-Analyze this OCR text and extract ONLY information that is EXPLICITLY present. Prioritize accuracy over completeness.
+        Analyze this OCR text and extract ONLY information that is EXPLICITLY present. Prioritize accuracy over completeness.
 
-DETECTED DOCUMENT TYPE: {doc_type}
-EXTRACTION STRATEGY: {strategy.get('extraction_priority', 'accuracy-first')}
+        DETECTED DOCUMENT TYPE: {doc_type}
+        EXTRACTION STRATEGY: {strategy.get('extraction_priority', 'accuracy-first')}
 
-OCR TEXT:
-{ocr_text}
+        OCR TEXT:
+        {ocr_text}
 
-🎯 EXTRACTION REQUIREMENTS:
+        🎯 EXTRACTION REQUIREMENTS:
 
-✅ ACCURACY-FIRST APPROACH:
-- Read every line of the OCR text carefully
-- Extract ONLY standard schema fields that have corresponding data clearly in the text
-- Use extra_fields to capture additional meaningful information that appears in the text
-- Create descriptive field names for extra_fields
+        ✅ ACCURACY-FIRST APPROACH:
+        - Read every line of the OCR text carefully
+        - Extract ONLY standard schema fields that have corresponding data clearly in the text
+        - Use extra_fields to capture additional meaningful information that appears in the text
+        - Create descriptive field names for extra_fields
 
-🔴 STRICT ANTI-HALLUCINATION PROTOCOL:
-- ONLY extract information that you can literally see in the OCR text above
-- For EACH field you extract, identify exactly where in the text you see it
-- NEVER infer, generate, guess, or assume any information not explicitly written
-- If information is not clearly present in the text, DO NOT include it - omit the field entirely
-- Field omission is STRONGLY PREFERRED to hallucination - leave out uncertain fields
-- Set low confidence scores (below 0.6) for fields where text is unclear
-- Better to extract NO fields than hallucinate even one field
+        🔴 STRICT ANTI-HALLUCINATION PROTOCOL:
+        - ONLY extract information that you can literally see in the OCR text above
+        - For EACH field you extract, identify exactly where in the text you see it
+        - NEVER infer, generate, guess, or assume any information not explicitly written
+        - If information is not clearly present in the text, DO NOT include it - omit the field entirely
+        - Field omission is STRONGLY PREFERRED to hallucination - leave out uncertain fields
+        - Set low confidence scores (below 0.6) for fields where text is unclear
+        - Better to extract NO fields than hallucinate even one field
 
-📋 DOCUMENT-SPECIFIC EXTRACTION FOCUS:
-"""
+        📋 DOCUMENT-SPECIFIC EXTRACTION FOCUS:
+        """
         
         # Add document-specific extraction instructions
         if doc_type == "land_use_restriction_agreement":
             specific_instructions = """
-🏘️ LAND USE AGREEMENT FOCUS:
-- Identify and extract grantor and grantee information (names, addresses)
-- Extract property location and description details
-- Capture all restrictions mentioned (commercial use, building height, environmental, etc.)
-- Extract duration/term information and effective dates
-- Look for legal terminology and conditions
-"""
+        🏘️ LAND USE AGREEMENT FOCUS:
+        - Identify and extract grantor and grantee information (names, addresses)
+        - Extract property location and description details
+        - Capture all restrictions mentioned (commercial use, building height, environmental, etc.)
+        - Extract duration/term information and effective dates
+        - Look for legal terminology and conditions
+        """
         elif doc_type in ["contract", "legal_agreement"]:
             specific_instructions = """
-📝 CONTRACT/AGREEMENT FOCUS:
-- Identify all contracting parties and their details
-- Extract contract purpose and scope
-- Capture terms, conditions, and obligations
-- Extract payment terms and schedules if mentioned
-- Look for duration, termination, and renewal clauses
-"""
+        📝 CONTRACT/AGREEMENT FOCUS:
+        - Identify all contracting parties and their details
+        - Extract contract purpose and scope
+        - Capture terms, conditions, and obligations
+        - Extract payment terms and schedules if mentioned
+        - Look for duration, termination, and renewal clauses
+        """
         elif "certificate" in doc_type:
             specific_instructions = """
-🏆 CERTIFICATE FOCUS:
-- Extract recipient name and achievement details
-- Capture issuing institution/authority information
-- Look for qualification levels, grades, or scores
-- Extract dates (issue, completion, validity)
-- Capture certificate number or reference codes
-"""
+        🏆 CERTIFICATE FOCUS:
+        - Extract recipient name and achievement details
+        - Capture issuing institution/authority information
+        - Look for qualification levels, grades, or scores
+        - Extract dates (issue, completion, validity)
+        - Capture certificate number or reference codes
+        """
         elif doc_type in ["invoice", "financial_document"]:
             specific_instructions = """
-💰 FINANCIAL DOCUMENT FOCUS:
-- Extract parties involved (seller, buyer, client, vendor)
-- Capture all monetary amounts and calculations
-- Look for itemized descriptions and quantities
-- Extract payment terms and due dates
-- Capture tax information and totals
-"""
+        💰 FINANCIAL DOCUMENT FOCUS:
+        - Extract parties involved (seller, buyer, client, vendor)
+        - Capture all monetary amounts and calculations
+        - Look for itemized descriptions and quantities
+        - Extract payment terms and due dates
+        - Capture tax information and totals
+        """
         else:
             specific_instructions = """
-📄 UNIVERSAL DOCUMENT FOCUS:
-- Extract all person/entity names and contact information
-- Capture all dates, numbers, and reference codes
-- Look for addresses, locations, and geographic information
-- Extract any structured data, terms, or conditions
-- Capture document-specific content using descriptive field names
-"""
+        📄 UNIVERSAL DOCUMENT FOCUS:
+        - Extract all person/entity names and contact information
+        - Capture all dates, numbers, and reference codes
+        - Look for addresses, locations, and geographic information
+        - Extract any structured data, terms, or conditions
+        - Capture document-specific content using descriptive field names
+        """
         
         final_prompt = f"""{base_prompt}{specific_instructions}
 
-🎯 FIELD NAMING FOR EXTRA_FIELDS:
-- Use descriptive names that clearly indicate content
-- Be specific: 'property_address' not 'address', 'restriction_details' not 'restrictions'  
-- Use domain-appropriate terms based on document content
+        🎯 FIELD NAMING FOR EXTRA_FIELDS:
+        - Use descriptive names that clearly indicate content
+        - Be specific: 'property_address' not 'address', 'restriction_details' not 'restrictions'  
+        - Use domain-appropriate terms based on document content
 
-🔍 VERIFICATION STEPS (DO THIS FOR EACH FIELD):
-1. Before including any field, verify the exact text exists in the OCR content above
-2. For each field you plan to extract, ask: "Can I find this exact text in the document?"
-3. If YES - include the field with appropriate confidence
-4. If NO - DO NOT include the field, even if you believe it should exist
-5. If PARTIAL/UNCLEAR - set confidence below 0.6 and only include exact visible text
+        🔍 VERIFICATION STEPS (DO THIS FOR EACH FIELD):
+        1. Before including any field, verify the exact text exists in the OCR content above
+        2. For each field you plan to extract, ask: "Can I find this exact text in the document?"
+        3. If YES - include the field with appropriate confidence
+        4. If NO - DO NOT include the field, even if you believe it should exist
+        5. If PARTIAL/UNCLEAR - set confidence below 0.6 and only include exact visible text
 
-✅ STRICT VALIDATION CHECKLIST:
-- Every extracted field MUST have corresponding text in the OCR - NO EXCEPTIONS
-- Field values MUST be exactly as written (or standardized dates)
-- NO information should be generated, inferred, or assumed
-- Preserve exact spelling and content from the source
-- When in doubt, OMIT the field rather than risk hallucination
-- Double-check ALL fields against the OCR text before submitting
+        ✅ STRICT VALIDATION CHECKLIST:
+        - Every extracted field MUST have corresponding text in the OCR - NO EXCEPTIONS
+        - Field values MUST be exactly as written (or standardized dates)
+        - NO information should be generated, inferred, or assumed
+        - Preserve exact spelling and content from the source
+        - When in doubt, OMIT the field rather than risk hallucination
+        - Double-check ALL fields against the OCR text before submitting
 
-🎯 SUCCESS CRITERIA:
-- Accuracy: Only extract what you can verify in the OCR text
-- Zero hallucination: No fields that aren't explicitly in the text
-- Well-structured: Use appropriate field names and organize information clearly
-- Appropriate confidence: Use lower confidence for unclear fields
+        🎯 SUCCESS CRITERIA:
+        - Accuracy: Only extract what you can verify in the OCR text
+        - Zero hallucination: No fields that aren't explicitly in the text
+        - Well-structured: Use appropriate field names and organize information clearly
+        - Appropriate confidence: Use lower confidence for unclear fields
 
-Return the data in JSON format. ACCURACY IS MORE IMPORTANT THAN COMPLETENESS!"""
-        
+        Return the data in JSON format. ACCURACY IS MORE IMPORTANT THAN COMPLETENESS!"""
+                
         return final_prompt
 
     async def extract_from_image(self, image_bytes: bytes) -> DocumentData:
@@ -922,7 +828,7 @@ Return the data in JSON format. ACCURACY IS MORE IMPORTANT THAN COMPLETENESS!"""
         """
         Clean and validate extracted data to ensure schema compliance
         """
-        from app.models.document_data import FieldWithConfidence
+    # FieldWithConfidence is already imported at module level
         
         # Ensure all field objects have both value and confidence
         def ensure_field_format(field_data):

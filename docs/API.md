@@ -128,7 +128,7 @@ curl -X POST "http://localhost:8000/api/extract?structured=true&include_raw=true
     "country": "USA",
     "nationality": "American",
     "passport_type": "P",
-    "extraction_method": "Vision LLM (Llama-4-Scout)"
+  "extraction_method": "Vision LLM (meta-llama/llama-4-scout-17b-16e-instruct)"
   }
 }
 ```
@@ -206,7 +206,7 @@ Returns a complete `DocumentData` object:
   "license_class": "C",
   "vehicle_categories": ["MOTORCYCLE", "PASSENGER CAR"],
   "restrictions": "CORRECTIVE LENSES",
-  "extraction_method": "Vision LLM (Llama-4-Scout)",
+  "extraction_method": "Vision LLM (meta-llama/llama-4-scout-17b-16e-instruct)",
   "confidence_score": 0.94
 }
 ```
@@ -506,14 +506,14 @@ extractDocument('./document.pdf', true)
 - **Typical Response Time**: 2-3 seconds
 - **Extraction Method**: "OCR+LLM (Kimi-K2)"
 
-### Fallback: Vision AI (Groq Llama-4-Scout)
+### Fallback: Vision LLM (Groq meta-llama/llama-4-scout-17b-16e-instruct)
 
 - **Model**: `meta-llama/llama-4-scout-17b-16e-instruct`
 - **Processing**: Direct image analysis without OCR preprocessing
 - **Strengths**: Handles complex layouts, handwritten text, poor image quality
 - **Use Case**: When OCR processing is insufficient or produces incomplete data
 - **Typical Response Time**: 3-4 seconds
-- **Extraction Method**: "Vision LLM (Llama-4-Scout)"
+- **Extraction Method**: "Vision LLM (meta-llama/llama-4-scout-17b-16e-instruct)"
 
 ### JSON Schema Validation
 

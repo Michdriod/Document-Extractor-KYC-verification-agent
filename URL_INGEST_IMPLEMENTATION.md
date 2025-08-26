@@ -12,7 +12,7 @@
   - Size limits (50MB max)
   - No file persistence (all in-memory)
   - Integrates with your existing `process_document()` pipeline
-  - Supports Google Drive URLs and direct document URLs
+  - Supports direct HTTPS document URLs
 
 ### 2. Frontend Integration
 **File**: `/templates/index_new.html`
@@ -84,7 +84,7 @@ curl -X POST "http://127.0.0.1:8000/api/extract/url-ingest" \
 ## 🔗 Supported URL Types
 
 - Direct HTTPS links to PDF/PNG/JPEG files
-- Google Drive shareable links (automatically converted)
+- Google Drive shareable links are no longer specially handled; use direct HTTPS links
 - Any HTTPS URL with proper Content-Type headers
 - URLs without file extensions (MIME-sniffed)
 

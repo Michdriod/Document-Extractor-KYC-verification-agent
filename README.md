@@ -1,10 +1,10 @@
 # Document Extractor & KYC Verification Agent
 
-A production-ready Python system for intelligent document processing and KYC verification that combines OCR technology with AI-powered extraction. Features dual AI processing with **OCR+Text AI (Kimi-K2) primary** and **Vision AI (Llama-4-Scout) fallback** for comprehensive document analysis, along with advanced semantic field understanding and categorization.
+A production-ready Python system for intelligent document processing and KYC verification that combines OCR technology with AI-powered extraction. Features dual AI processing with **OCR+Text AI (Kimi-K2) primary** and **Vision LLM (meta-llama/llama-4-scout-17b-16e-instruct) fallback** for comprehensive document analysis, along with advanced semantic field understanding and categorization.
 
 ## 🚀 Key Features
 
-- **Dual AI Processing**: OCR+Text AI (Kimi-K2) primary with Vision AI (Llama-4-Scout) fallback
+- **Dual AI Processing**: OCR+Text AI (Kimi-K2) primary with Vision LLM (meta-llama/llama-4-scout-17b-16e-instruct) fallback
 - **Multi-Document Support**: 15+ document types including international passports, IDs, licenses, and certificates
 - **Intelligent Field Filtering**: Document-specific field extraction with relevance-based filtering
 - **Semantic Field Understanding**: Automatic categorization of fields into meaningful groups with relationship detection
@@ -173,7 +173,7 @@ curl -X POST "http://localhost:8000/api/extract?structured=true&include_raw=true
     "date_of_birth": "1990-01-01",
     "date_of_expiry": "2030-01-01",
     "country": "USA",
-    "extraction_method": "Vision LLM (Llama-4-Scout)"
+  "extraction_method": "Vision LLM (meta-llama/llama-4-scout-17b-16e-instruct)"
   }
 }
 ```
@@ -437,7 +437,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 | Feature | Status | Description |
 |---------|--------|-------------|
-| ✅ Vision AI | Production | Groq Llama-4-Scout direct image processing |
+| ✅ Vision LLM | Production | Groq meta-llama/llama-4-scout-17b-16e-instruct direct image processing |
 | ✅ OCR+LLM | Production | PaddleOCR + Groq Kimi-K2 fallback |
 | ✅ Multi-Document | Production | 15+ document types supported |
 | ✅ Field Filtering | Production | Document-specific relevant field extraction |

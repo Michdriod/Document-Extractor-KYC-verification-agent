@@ -34,7 +34,7 @@ async def index(request: Request):
 
 @app.get("/updated", response_class=HTMLResponse)
 async def index_updated(request: Request):
-    """Serve the updated index HTML page with Google Drive URL support"""
+    """Serve the updated index HTML page with URL ingest support"""
     return templates.TemplateResponse("index_new_updated.html", {"request": request})
 
 if __name__ == "__main__":
