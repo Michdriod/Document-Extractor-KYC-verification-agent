@@ -1,3 +1,5 @@
+"""High-level document extraction orchestrator that uses OCR and LLMs to produce structured documents."""
+
 import os
 import base64
 import json

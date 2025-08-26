@@ -1,3 +1,5 @@
+"""Document processing utilities: PDF-to-image conversion and OCR orchestration using PaddleOCR."""
+
 import io
 import asyncio
 import time

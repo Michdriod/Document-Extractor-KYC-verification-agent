@@ -1,3 +1,5 @@
+"""LLM-assisted extraction helpers: cleaning helpers, guidelines, and utilities for structuring OCR output."""
+
 import os
 import base64
 import json

@@ -1,3 +1,5 @@
+"""Field verification utilities to confirm extracted values exist in OCR text and compute verification scores."""
+
 import re
 from typing import Dict, Any, List
 

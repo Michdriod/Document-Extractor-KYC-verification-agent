@@ -1,3 +1,5 @@
+"""Address extraction helper functions to pull addresses, phone, and email from OCR text."""
+
 import json
 from typing import Dict, Any, List, Optional, Union
 from app.models.document_data import DocumentData, FieldWithConfidence

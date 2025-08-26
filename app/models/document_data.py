@@ -1,3 +1,5 @@
+"""Pydantic models for structured document data and helper field types."""
+
 from typing import Optional, List, Union, Any
 from typing import Optional, List, Dict
 from pydantic import BaseModel, Field, field_validator

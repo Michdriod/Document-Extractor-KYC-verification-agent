@@ -1,3 +1,5 @@
+"""Semantic field extraction using LLM analysis to find entities and relationships across document text."""
+
 import os
 import re
 import json

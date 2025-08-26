@@ -1,3 +1,5 @@
+"""API endpoints for basic document extraction and analysis."""
+
 from fastapi import APIRouter, UploadFile, File, HTTPException, Query
 from fastapi.responses import JSONResponse
 from typing import List, Dict, Any, Optional
@@ -8,6 +10,7 @@ from app.models.document_data import DocumentData
 from app.services.llm_extractor import get_image_bytes_from_input
 
 
+# Helper: convert FieldWithConfidence and other model objects to plain dicts for JSON serialization
 def convert_fields_to_dict(data):
     """Recursively convert FieldWithConfidence objects to dictionaries"""
     if hasattr(data, 'to_dict'):

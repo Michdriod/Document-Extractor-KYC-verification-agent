@@ -84,13 +84,23 @@
                 <!-- URL and Local Path Inputs -->
                 <div class="mt-4 space-y-2">
                     <label class="block text-sm font-medium text-gray-700">Or paste a document URL:</label>
-                    <input 
-                        type="text" 
-                        x-model="documentUrl"
-                        placeholder="https://example.com/document.pdf or Google Drive URL"
-                        class="w-full px-4 py-2 border rounded focus:outline-none focus:ring focus:border-blue-300"
-                    >
-                    <p class="text-xs text-gray-500">Supports: Standard image/PDF URLs and Google Drive links</p>
+                    <div class="flex space-x-2">
+                        <input 
+                            type="text" 
+                            x-model="documentUrl"
+                            placeholder="https://example.com/document.pdf or Google Drive URL"
+                            class="flex-1 px-4 py-2 border rounded focus:outline-none focus:ring focus:border-blue-300"
+                        >
+                        <button 
+                            @click="testUrl()"
+                            :disabled="!documentUrl || isProcessing"
+                            class="px-4 py-2 bg-gray-600 text-white rounded hover:bg-gray-700 disabled:bg-gray-300 disabled:cursor-not-allowed text-sm"
+                            title="Test URL accessibility and file type"
+                        >
+                            <i class="fas fa-check mr-1"></i>Test
+                        </button>
+                    </div>
+                    <p class="text-xs text-gray-500">Supports: HTTPS URLs with automatic MIME detection (PDF, PNG, JPEG) including Google Drive links</p>
                     <label class="block text-sm font-medium text-gray-700 mt-2">Or enter a local file path:</label>
                     <input 
                         type="text" 
@@ -488,11 +498,11 @@
                     }
                     // URL validation - UPDATED to support Google Drive URLs and other URLs
                     if (this.documentUrl) {
-                        // Accept any URL that looks legitimate
-                        const validUrlPattern = /^https?:\/\/.+/i;
+                        // Accept any HTTPS URL
+                        const validUrlPattern = /^https:\/\/.+/i;
                         
                         if (!validUrlPattern.test(this.documentUrl)) {
-                            this.error = 'Invalid URL format. Please provide a valid URL.';
+                            this.error = 'Invalid URL format. Please provide a valid HTTPS URL for security.';
                             return;
                         }
                         
@@ -514,26 +524,47 @@
                     this.progressMessage = 'Uploading document...';
 
                     try {
-                        const formData = new FormData();
-                        if (this.selectedFile) {
-                            formData.append('file', this.selectedFile);
-                        } else if (this.documentUrl) {
-                            formData.append('url', this.documentUrl);
-                        } else if (this.documentPath) {
-                            formData.append('path', this.documentPath);
-                        }
+                        let endpoint, requestOptions;
+                        
+                        // Use new URL ingest endpoint for URLs
+                        if (this.documentUrl) {
+                            endpoint = '/api/extract/url-ingest';
+                            requestOptions = {
+                                method: 'POST',
+                                headers: {
+                                    'Content-Type': 'application/json'
+                                },
+                                body: JSON.stringify({
+                                    url: this.documentUrl,
+                                    structured: this.extractStructured,
+                                    include_raw: false
+                                })
+                            };
+                            this.progressMessage = 'Downloading and processing URL...';
+                        } else {
+                            // Use existing endpoint for files and paths
+                            const formData = new FormData();
+                            if (this.selectedFile) {
+                                formData.append('file', this.selectedFile);
+                            } else if (this.documentPath) {
+                                formData.append('path', this.documentPath);
+                            }
 
-                        const endpoint = this.extractStructured ? 
-                            '/api/extract?structured=true' : 
-                            '/api/extract';
+                            endpoint = this.extractStructured ? 
+                                '/api/extract?structured=true' : 
+                                '/api/extract';
+                            
+                            requestOptions = {
+                                method: 'POST',
+                                body: formData
+                            };
+                            this.progressMessage = 'Uploading document...';
+                        }
 
                         this.progress = 30;
                         this.progressMessage = 'Processing with OCR...';
 
-                        const response = await fetch(endpoint, {
-                            method: 'POST',
-                            body: formData
-                        });
+                        const response = await fetch(endpoint, requestOptions);
 
                         this.progress = 70;
                         this.progressMessage = 'Analyzing results...';
@@ -558,6 +589,50 @@
                         this.error = err.message;
                         this.isProcessing = false;
                         this.progress = 0;
+                    }
+                },
+
+                async testUrl() {
+                    if (!this.documentUrl) {
+                        this.error = 'Please enter a URL first.';
+                        return;
+                    }
+
+                    // Validate HTTPS URL
+                    const validUrlPattern = /^https:\/\/.+/i;
+                    if (!validUrlPattern.test(this.documentUrl)) {
+                        this.error = 'Invalid URL format. Please provide a valid HTTPS URL.';
+                        return;
+                    }
+
+                    this.error = null;
+                    this.isProcessing = true;
+                    this.progressMessage = 'Testing URL accessibility...';
+
+                    try {
+                        const response = await fetch(`/api/extract/url-ingest/test?url=${encodeURIComponent(this.documentUrl)}&dry_run=true`);
+                        
+                        if (!response.ok) {
+                            const errorData = await response.json();
+                            throw new Error(errorData.detail || 'URL test failed');
+                        }
+
+                        const result = await response.json();
+                        
+                        if (result.success && result.accessible) {
+                            this.error = null;
+                            // Show success message with file info
+                            const fileSize = this.formatFileSize(result.file_size_bytes);
+                            const supported = result.supported ? '✅ Supported' : '❌ Unsupported';
+                            alert(`✅ URL Test Successful!\n\nFile Type: ${result.mime_type}\nFile Size: ${fileSize}\nSupported: ${supported}`);
+                        } else {
+                            throw new Error(result.error || 'URL is not accessible or supported');
+                        }
+                    } catch (err) {
+                        this.error = `URL Test Failed: ${err.message}`;
+                    } finally {
+                        this.isProcessing = false;
+                        this.progressMessage = '';
                     }
                 },
 
