@@ -1,10 +1,9 @@
 """API endpoints for basic document extraction and analysis."""
 
-from fastapi import APIRouter, UploadFile, File, HTTPException, Query
+from fastapi import APIRouter, UploadFile, File, HTTPException, Query, Request
 from fastapi.responses import JSONResponse
-from typing import List, Dict, Any, Optional
-import io
 import traceback
+from urllib.parse import urlparse, unquote
 from app.services.document_processor import process_document
 from app.models.document_data import DocumentData
 from app.services.llm_extractor import get_image_bytes_from_input
@@ -23,14 +22,33 @@ def convert_fields_to_dict(data):
         return data
 
 
+# Helper: strip any raw OCR artifacts from payloads (never return OCR line data)
+def strip_ocr_artifacts(data):
+    """Remove OCR line data keys from nested dict/list structures.
+    This enforces that responses never include raw OCR outputs.
+    """
+    OCR_KEYS = {"ocr", "ocr_text", "ocr_lines", "ocr_results", "ocr_raw", "raw_ocr", "ocr_blocks", "results"}
+    if isinstance(data, dict):
+        for k in list(data.keys()):
+            if k in OCR_KEYS:
+                data.pop(k, None)
+            else:
+                strip_ocr_artifacts(data[k])
+    elif isinstance(data, list):
+        for i in data:
+            strip_ocr_artifacts(i)
+    return data
+
+
 # Create router
 document_router = APIRouter(tags=["Document Processing"])
 
 @document_router.post("/extract")
 async def extract_document(
+    request: Request,
     file: UploadFile = File(None),
-    url: str = Query(None, description= "URL to document (image to PDF)"),
-    path: str = Query(None, desription= "Local file path to document"),
+    url: str = Query(None, description="URL to document (image or PDF)"),
+    path: str = Query(None, description="Local file path to document"),
     structured: bool = Query(False, description="Extract structured data using LLM"),
     include_raw: bool = Query(False, description="Include complete raw JSON with all fields")
 ):
@@ -48,10 +66,8 @@ async def extract_document(
     Returns:
         JSON response with OCR results and structured data if requested
     """
-    # Validate file extension first - before any other processing
-    allowed_extensions = ["pdf", "jpg", "jpeg", "png"]
     
-    # Determine input source
+    # Determine input source (file > url > path). Also support JSON body for url/path.
     if file:
         file_content = await file.read()
         input_source = file_content
@@ -60,7 +76,8 @@ async def extract_document(
         file_extension = file.filename.split(".")[-1].lower()
     elif url:
         input_source = url
-        filename = url.split("/")[-1]
+        parsed = urlparse(url)
+        filename = unquote(parsed.path.split("/")[-1]) or url
         # Don't validate URL extension - we'll check the content type instead
         file_extension = "unknown"
     elif path:
@@ -68,10 +85,33 @@ async def extract_document(
         filename = path.split("/")[-1]
         file_extension = path.split(".")[-1].lower()
     else:
-        return JSONResponse(
-            status_code=400,
-            content={"detail": "No input provided. Please provide either file, url, or path."}
-        )
+        # Try to read JSON body for url/path when no query params provided
+        body_url = None
+        body_path = None
+        try:
+            if request.headers.get("content-type", "").startswith("application/json"):
+                payload = await request.json()
+                if isinstance(payload, dict):
+                    body_url = payload.get("url")
+                    body_path = payload.get("path")
+        except Exception:
+            body_url = body_url or None
+            body_path = body_path or None
+
+        if body_url:
+            input_source = body_url
+            parsed = urlparse(body_url)
+            filename = unquote(parsed.path.split("/")[-1]) or body_url
+            file_extension = "unknown"
+        elif body_path:
+            input_source = body_path
+            filename = body_path.split("/")[-1]
+            file_extension = body_path.split(".")[-1].lower() if "." in body_path else "unknown"
+        else:
+            return JSONResponse(
+                status_code=400,
+                content={"detail": "No input provided. Provide one of: file upload, url, or path (as query or JSON body)."}
+            )
     
     try:
         # Use the utility to get image bytes from any input type with enhanced URL support
@@ -84,7 +124,7 @@ async def extract_document(
                 status_code=400,
                 content={"detail": str(url_error)}
             )
-        
+
         if structured:
             # Extract both raw OCR results and structured data
             ocr_results, structured_documents, all_relevant_fields = await process_document(
@@ -98,7 +138,6 @@ async def extract_document(
                 # Multiple documents found
                 response_data = {
                     "filename": file.filename if file else (url or path),
-                    "ocr_results": ocr_results,
                     "multiple_documents": True,
                     "document_count": len(structured_documents),
                     # Convert all FieldWithConfidence objects to dicts recursively
@@ -122,7 +161,6 @@ async def extract_document(
                 
                 response_data = {
                     "filename": file.filename if file else (url or path),
-                    "ocr_results": ocr_results,
                     "multiple_documents": False,
                     "document_count": 1,
                     # Convert all FieldWithConfidence objects to dicts recursively
@@ -133,13 +171,14 @@ async def extract_document(
                 if include_raw:
                     response_data["raw_structured_data"] = structured_data.dict() if structured_data else {}
             
-            return JSONResponse(content=response_data)
+            # Ensure no raw OCR artifacts are present
+            return JSONResponse(content=strip_ocr_artifacts(response_data))
         else:
-            # Just extract OCR results
-            ocr_results = await process_document(image_bytes, file_extension)
+            # OCR-only mode: do not return raw OCR lines; return minimal envelope
+            # keeping backward compatibility of route shape (filename present)
             return JSONResponse(content={
                 "filename": file.filename if file else (url or path),
-                "results": ocr_results
+                "message": "Set structured=true to receive extracted JSON fields. Raw OCR lines are not returned."
             })
     
     except ValueError as ve:
@@ -160,8 +199,13 @@ async def extract_document(
         )
 
 
-@document_router.post("/analyze", response_model=DocumentData)
-async def analyze_document(file: UploadFile = File(...)):
+@document_router.post("/analyze", deprecated=True)
+async def analyze_document(
+    request: Request,
+    file: UploadFile = File(None),
+    url: str = Query(None, description="URL to document (image or PDF)"),
+    path: str = Query(None, description="Local file path to document")
+):
     """
     Analyze a document and extract structured information
     
@@ -173,35 +217,71 @@ async def analyze_document(file: UploadFile = File(...)):
     Returns:
         Structured document data
     """
-    # Validate file extension
-    allowed_extensions = ["pdf", "jpg", "jpeg", "png"]
-    file_extension = file.filename.split(".")[-1].lower()
-    
-    if file_extension not in allowed_extensions:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Unsupported file format. Allowed formats: {', '.join(allowed_extensions)}"
-        )
-    
-    try:
-        # Process the document with structured data extraction
+    # Determine input source (file > url > path)
+    if file:
         file_content = await file.read()
-        _, structured_documents, all_relevant_fields = await process_document(
-            file_content, 
+        input_source = file_content
+        file_extension = file.filename.split(".")[-1].lower()
+        filename = file.filename
+    elif url:
+        input_source = url
+        file_extension = "unknown"
+        parsed = urlparse(url)
+        filename = unquote(parsed.path.split("/")[-1]) or url
+    elif path:
+        input_source = path
+        file_extension = path.split(".")[-1].lower() if "." in path else "unknown"
+        filename = path.split("/")[-1]
+    else:
+        # Try JSON body for url/path
+        body_url = None
+        body_path = None
+        try:
+            if request.headers.get("content-type", "").startswith("application/json"):
+                payload = await request.json()
+                if isinstance(payload, dict):
+                    body_url = payload.get("url")
+                    body_path = payload.get("path")
+        except Exception:
+            pass
+        if body_url:
+            input_source = body_url
+            file_extension = "unknown"
+            parsed = urlparse(body_url)
+            filename = unquote(parsed.path.split("/")[-1]) or body_url
+        elif body_path:
+            input_source = body_path
+            file_extension = body_path.split(".")[-1].lower() if "." in body_path else "unknown"
+            filename = body_path.split("/")[-1]
+        else:
+            raise HTTPException(status_code=400, detail="No input provided. Provide file, url, or path (query or JSON body).")
+
+    try:
+        # Normalize input to image bytes
+        image_bytes = get_image_bytes_from_input(input_source)
+        # Always perform structured extraction for analysis
+        _, structured_documents, _ = await process_document(
+            image_bytes,
             file_extension,
             extract_structured=True
         )
-        
-        # Return the first document for backward compatibility with single document analysis
+
+        # Return the first document's JSON if available
         if structured_documents:
-            return structured_documents[0].dict()
+            payload = structured_documents[0].dict()
+            return JSONResponse(content=strip_ocr_artifacts(payload))
         else:
-            raise HTTPException(status_code=500, detail="No documents found in the file")
+            raise HTTPException(status_code=500, detail="No documents found in the input")
         
     except Exception as e:
         # Log the error for debugging
         print(f"Error analyzing document: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Error analyzing document: {str(e)}")
+
+
+
+
+
 # from fastapi.responses import JSONResponse
 # from typing import List
 
@@ -234,6 +314,7 @@ async def analyze_document(file: UploadFile = File(...)):
     
 #     except Exception as e:
 #         raise HTTPException(status_code=500, detail=f"Error processing document: {str(e)}")
+
 
 
 

@@ -530,6 +530,86 @@ def get_image_bytes_from_input(input_source: Union[bytes, str]) -> bytes:
             raise ValueError("Unsupported file type or path. Please use image files (PNG, JPG, JPEG), PDF files, or valid URLs.")
 
     raise ValueError("Input must be image bytes, file path, or a valid URL (image or PDF)")
+
+
+def get_image_pages_from_input(input_source: Union[bytes, str]) -> list[bytes]:
+    """
+    Unified page-oriented ingestion helper.
+
+    - Accepts: raw bytes, local path, or URL (HTTP/HTTPS)
+    - If PDF: converts ALL pages to JPEG bytes and returns a list
+    - If image: returns a single-element list with the image bytes
+    - Removes the need for per-endpoint PDF conversion logic
+
+    Raises ValueError with a concise message for invalid or unsupported inputs.
+    """
+    def _pdf_bytes_to_pages(pdf_bytes: bytes) -> list[bytes]:
+        try:
+            from pdf2image import convert_from_bytes as _convert_from_bytes
+        except Exception as imp_err:
+            raise ValueError(f"PDF support not available. Install pdf2image and Poppler. Error: {imp_err}")
+        try:
+            pil_pages = _convert_from_bytes(pdf_bytes)
+        except Exception as e:
+            raise ValueError(f"Failed to render PDF pages: {e}")
+        out: list[bytes] = []
+        for pg in pil_pages:
+            if pg.mode == 'RGBA':
+                pg = pg.convert('RGB')
+            buf = io.BytesIO()
+            pg.save(buf, format='JPEG')
+            out.append(buf.getvalue())
+        if not out:
+            raise ValueError("No pages rendered from PDF")
+        return out
+
+    # Case 1: direct bytes
+    if isinstance(input_source, (bytes, bytearray)):
+        b = bytes(input_source)
+        if b.startswith(b'%PDF'):
+            return _pdf_bytes_to_pages(b)
+        return [b]
+
+    # Case 2: string input (URL or local path)
+    if isinstance(input_source, str):
+        # URL handling
+        if input_source.startswith("http"):
+            try:
+                resp = requests.get(input_source)
+                if resp.status_code != 200:
+                    raise ValueError(f"Failed to download URL. Status code: {resp.status_code}")
+                ct = resp.headers.get("Content-Type", "").lower()
+                data = resp.content
+                # PDF by header or extension or signature
+                if "pdf" in ct or input_source.lower().endswith('.pdf') or data.startswith(b'%PDF'):
+                    return _pdf_bytes_to_pages(data)
+                # Image content-types and signatures
+                if any(x in ct for x in ["image/jpeg", "image/jpg", "image/png"]):
+                    return [data]
+                if data.startswith(b'\xff\xd8\xff') or data.startswith(b'\x89PNG\r\n\x1a\n'):
+                    return [data]
+                # Extension fallback
+                if input_source.lower().endswith(('.png', '.jpg', '.jpeg')):
+                    return [data]
+                raise ValueError(f"Unsupported content from URL. Content-Type: {ct or 'unknown'}")
+            except Exception as e:
+                raise ValueError(f"Error accessing URL: {e}")
+
+        # Local path handling
+        path_lower = input_source.lower()
+        try:
+            if path_lower.endswith('.pdf'):
+                with open(input_source, 'rb') as f:
+                    return _pdf_bytes_to_pages(f.read())
+            if path_lower.endswith(('.png', '.jpg', '.jpeg')):
+                with open(input_source, 'rb') as f:
+                    return [f.read()]
+        except Exception as e:
+            raise ValueError(f"Error reading file: {e}")
+
+        raise ValueError("Unsupported file path. Use PDF/JPG/PNG or a valid URL.")
+
+    raise ValueError("Input must be bytes, a local file path, or a URL")
     
     
 # Load environment variables from .env file

@@ -32,10 +32,12 @@ async def index(request: Request):
     """Serve the index HTML page with URL ingest support"""
     return templates.TemplateResponse("index_new.html", {"request": request})
 
-@app.get("/updated", response_class=HTMLResponse)
-async def index_updated(request: Request):
-    """Serve the updated index HTML page with URL ingest support"""
-    return templates.TemplateResponse("index_new_updated.html", {"request": request})
 
 if __name__ == "__main__":
     uvicorn.run("app.main:app", host="0.0.0.0", port=8000, reload=True)
+
+
+# @app.get("/updated", response_class=HTMLResponse)
+# async def index_updated(request: Request):
+#     """Serve the updated index HTML page with URL ingest support"""
+#     return templates.TemplateResponse("index_new_updated.html", {"request": request})

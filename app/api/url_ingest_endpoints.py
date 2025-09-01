@@ -18,7 +18,21 @@ except ImportError:
     print("⚠️ python-magic not available, using basic MIME detection")
 
 from app.services.document_processor import process_document
-from app.services.llm_extractor import get_image_bytes_from_input
+
+# Helper: strip any raw OCR artifacts from payloads (never return OCR line data)
+def strip_ocr_artifacts(data):
+    """Remove OCR line data keys from nested dict/list structures to avoid returning raw OCR."""
+    OCR_KEYS = {"ocr", "ocr_text", "ocr_lines", "ocr_results", "ocr_raw", "raw_ocr", "ocr_blocks", "results"}
+    if isinstance(data, dict):
+        keys_to_delete = [k for k in data.keys() if k in OCR_KEYS]
+        for k in keys_to_delete:
+            del data[k]
+        for k in list(data.keys()):
+            strip_ocr_artifacts(data[k])
+    elif isinstance(data, list):
+        for i in data:
+            strip_ocr_artifacts(i)
+    return data
 
 
 class URLIngestRequest(BaseModel):
@@ -216,31 +230,24 @@ async def extract_document_from_url(request: URLIngestRequest):
                 "document_count": len(structured_documents)
             }
             
-            # Include raw data if requested
+            # Include raw structured data only (never include raw OCR line data)
             if request.include_raw:
-                result["raw_ocr"] = ocr_results
                 result["raw_structured"] = serializable_documents
                 
         else:
-            # OCR-only extraction
-            ocr_results = await process_document(
-                file_content=file_content,
-                file_extension=file_extension,
-                extract_structured=False
-            )
-            
+            # OCR-only mode: do not return raw OCR lines; return minimal envelope guiding to structured=true
             result = {
                 "success": True,
-                "source": "url_ingest", 
+                "source": "url_ingest",
                 "url": str(request.url),
                 "mime_type": detected_mime,
                 "file_extension": file_extension,
                 "file_size_bytes": len(file_content),
-                "ocr_results": ocr_results
+                "message": "Set structured=true to receive extracted JSON fields. Raw OCR lines are not returned."
             }
         
         print(f"✅ URL ingestion completed successfully")
-        return JSONResponse(content=result)
+        return JSONResponse(content=strip_ocr_artifacts(result))
         
     except HTTPException as he:
         # Re-raise HTTP exceptions as-is

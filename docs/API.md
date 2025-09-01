@@ -19,40 +19,48 @@ Currently, the API does not require authentication. For production deployments, 
 - OAuth 2.0 integration
 - Rate limiting per client
 
-## Content Type
+## Content Types & Inputs
 
-All endpoints accept `multipart/form-data` for file uploads and return `application/json` responses.
+- File uploads: `multipart/form-data`
+- URL or local path ingestion: query parameters (`url` or `path`)
+- All endpoints return `application/json` responses.
 
 ---
 
 ## Endpoints
 
-### 1. Document Extraction Endpoint
+### 1) Document Extraction (single-document friendly)
 
-Extract text and optionally structured data from uploaded documents.
+Extract text and optionally structured data from documents. Accepts file upload, HTTPS URL, or local file path.
 
 #### `POST /api/extract`
 
 **Description:** Primary endpoint for document processing with flexible output options.
 
-**Parameters:**
+**Parameters (query/form):**
 
 | Parameter | Type | Required | Default | Description |
 |-----------|------|----------|---------|-------------|
-| `file` | File | Yes | - | Document file (PDF, JPG, JPEG, PNG) |
+| `file` | File | No | - | Document file (PDF, JPG, JPEG, PNG) |
+| `url` | String | No | - | HTTPS link to image or PDF (no extension required) |
+| `path` | String | No | - | Local file path (for trusted/internal use only) |
 | `structured` | Boolean | No | `false` | Extract structured data using AI |
 | `include_raw` | Boolean | No | `false` | Include complete raw JSON data |
 
-**Supported File Formats:**
+At least one of `file`, `url`, or `path` must be provided.
+
+**Supported Formats:**
+
 - PDF (`.pdf`)
 - JPEG (`.jpg`, `.jpeg`)
 - PNG (`.png`)
+
 
 **Maximum File Size:** 10MB
 
 #### Request Examples
 
-##### Basic OCR Extraction
+##### Basic OCR Extraction (file)
 
 ```bash
 curl -X POST "http://localhost:8000/api/extract" \
@@ -72,6 +80,22 @@ curl -X POST "http://localhost:8000/api/extract?structured=true" \
 
 ##### Debug Mode (with Raw Data)
 
+##### URL Ingestion (no file upload)
+
+```bash
+curl -X POST "http://localhost:8000/api/extract?structured=true" \
+  -H "accept: application/json" \
+  "&url=https://example.com/sample.pdf"
+```
+
+##### Local Path (internal use)
+
+```bash
+curl -X POST "http://localhost:8000/api/extract?structured=true" \
+  -H "accept: application/json" \
+  "&path=/absolute/path/to/document.png"
+```
+
 ```bash
 curl -X POST "http://localhost:8000/api/extract?structured=true&include_raw=true" \
   -H "accept: application/json" \
@@ -86,20 +110,7 @@ curl -X POST "http://localhost:8000/api/extract?structured=true&include_raw=true
 ```json
 {
   "filename": "document.pdf",
-  "results": [
-    {
-      "text": "PASSPORT",
-      "confidence": 0.99
-    },
-    {
-      "text": "JOHN DOE",
-      "confidence": 0.95
-    },
-    {
-      "text": "123456789",
-      "confidence": 0.98
-    }
-  ]
+  "message": "Set structured=true to receive extracted JSON fields. Raw OCR lines are not returned."
 }
 ```
 
@@ -108,16 +119,6 @@ curl -X POST "http://localhost:8000/api/extract?structured=true&include_raw=true
 ```json
 {
   "filename": "passport.jpg",
-  "ocr_results": [
-    {
-      "text": "PASSPORT",
-      "confidence": 0.99
-    },
-    {
-      "text": "JOHN DOE",
-      "confidence": 0.95
-    }
-  ],
   "structured_data": {
     "document_type": "International Passport",
     "given_names": "JOHN",
@@ -138,7 +139,6 @@ curl -X POST "http://localhost:8000/api/extract?structured=true&include_raw=true
 ```json
 {
   "filename": "national_id.png",
-  "ocr_results": [...],
   "structured_data": {
     "document_type": "National ID",
     "given_names": "JANE",
@@ -167,13 +167,13 @@ curl -X POST "http://localhost:8000/api/extract?structured=true&include_raw=true
 
 ---
 
-### 2. Document Analysis Endpoint
+### 2) Document Analysis (always structured) — Deprecated alias
 
 Direct structured data extraction that always returns structured data.
 
 #### `POST /api/analyze`
 
-**Description:** Simplified endpoint for structured data extraction only.
+**Description:** Deprecated alias for `/api/extract?structured=true`. Prefer using `/api/extract` with `structured=true` for consistency across inputs and options. Existing integrations will continue to work.
 
 **Parameters:**
 
@@ -213,13 +213,51 @@ Returns a complete `DocumentData` object:
 
 ---
 
-### 3. Health Check Endpoints
+### 3) Enhanced Extraction (multi-document friendly)
+
+Processes inputs that may contain multiple documents or long multi-page files, and returns an array of documents with rich metadata and field organization.
+
+#### `POST /api/extract/enhanced`
+
+**Parameters (query/form):** same as `/api/extract` (`file`, `url`, `path`).
+
+**Response (simplified):**
+
+```json
+{
+  "documents": [
+    {
+      "extraction_status": "success",
+      "data": {
+        "fields": { "surname": {"value": "DOE", "confidence": 0.96 }, "document_number": {"value": "A123...", "confidence": 0.93 } },
+        "categorized_fields": { "personal_information": {"surname": {"value": "DOE", "confidence": 0.96 }} },
+        "primary_fields": { "full_name": {"value": "JOHN DOE", "confidence": 0.95 }, "document_number": {"value": "A123...", "confidence": 0.93 } },
+        "related_fields": [ { "field1": "date_of_issue", "field2": "date_of_expiry", "score": 0.82 } ]
+      }
+    }
+  ],
+  "metadata": {
+    "filename": "document.pdf",
+    "processing_time_ms": 1820,
+    "ocr_text_length": 1245,
+    "source_type": "url|file|path",
+    "source_url": "https://example.com/document.pdf"
+  }
+}
+```
+
+Use this endpoint when a single file may contain multiple distinct documents or when you want richer organization (categories, primary/related fields) out of the box.
+
+---
+
+### 4) Health Check Endpoints
 
 #### `GET /health`
 
 Basic health status endpoint.
 
 **Response:**
+
 ```json
 {
   "status": "healthy",
@@ -232,6 +270,7 @@ Basic health status endpoint.
 Readiness probe for container orchestration.
 
 **Response:**
+
 ```json
 {
   "status": "ready",
@@ -625,6 +664,7 @@ For production deployments, implement:
 
 **Cause:** Various processing issues
 **Solutions:**
+
 - Check image quality and clarity
 - Ensure document is properly oriented
 - Try a different file format
@@ -634,6 +674,7 @@ For production deployments, implement:
 
 **Cause:** Poor image quality or unsupported document layout
 **Solutions:**
+
 - Improve image resolution and lighting
 - Ensure full document is visible in image
 - Check document type is supported
@@ -643,6 +684,7 @@ For production deployments, implement:
 
 **Cause:** Large file processing or AI service delays
 **Solutions:**
+
 - Reduce file size through compression
 - Retry request after brief delay
 - Check AI service status
@@ -660,6 +702,7 @@ curl -X POST "http://localhost:8000/api/extract?structured=true&include_raw=true
 ```
 
 Debug response provides:
+
 - Complete raw extraction data
 - Processing method used (Vision vs OCR+LLM)
 - Confidence scores
@@ -678,4 +721,9 @@ For additional support:
 
 ---
 
-*API Documentation last updated: August 5, 2025*
+Notes:
+
+- Field values are typically returned as objects with `{ value, confidence }` to retain provenance.
+- The API converts these to plain JSON when needed for compatibility.
+
+Last updated: September 1, 2025
