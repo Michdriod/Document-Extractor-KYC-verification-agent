@@ -15,6 +15,7 @@ from PIL import Image
 import io
 from app.services.enhanced_extractor import DocumentExtractor
 from app.services.llm_extractor import get_image_pages_from_input
+from app.services.url_ingest import safe_stream_and_detect_mime, mime_to_extension
 
 
 # Helper: convert FieldWithConfidence and other model objects to plain dicts for JSON serialization
@@ -73,10 +74,15 @@ async def extract_document_enhanced(
         filename = file.filename
         file_extension = file.filename.split(".")[-1].lower() if "." in file.filename else "unknown"
     elif url:
-        input_source = url
-        parsed = urlparse(url)
-        filename = unquote(parsed.path.split("/")[-1]) or url
-        file_extension = parsed.path.split(".")[-1].lower() if "." in parsed.path else "unknown"
+        # Use shared URL ingestion for consistency with /extract/url-ingest
+        try:
+            file_bytes, mime = safe_stream_and_detect_mime(url, allow_http=True)
+            input_source = file_bytes
+            file_extension = mime_to_extension(mime)
+            parsed = urlparse(url)
+            filename = unquote(parsed.path.split("/")[-1]) or url
+        except Exception as e:
+            return JSONResponse(status_code=400, content={"detail": f"URL error: {e}"})
     elif path:
         input_source = path
         filename = path.split("/")[-1]

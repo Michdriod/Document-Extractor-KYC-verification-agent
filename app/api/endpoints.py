@@ -7,6 +7,7 @@ from urllib.parse import urlparse, unquote
 from app.services.document_processor import process_document
 from app.models.document_data import DocumentData
 from app.services.llm_extractor import get_image_bytes_from_input
+from app.services.url_ingest import safe_stream_and_detect_mime, mime_to_extension
 
 
 # Helper: convert FieldWithConfidence and other model objects to plain dicts for JSON serialization
@@ -68,6 +69,8 @@ async def extract_document(
     """
     
     # Determine input source (file > url > path). Also support JSON body for url/path.
+    body_url = None
+    body_path = None
     if file:
         file_content = await file.read()
         input_source = file_content
@@ -75,19 +78,21 @@ async def extract_document(
         # File extension only needed for uploaded files
         file_extension = file.filename.split(".")[-1].lower()
     elif url:
-        input_source = url
-        parsed = urlparse(url)
-        filename = unquote(parsed.path.split("/")[-1]) or url
-        # Don't validate URL extension - we'll check the content type instead
-        file_extension = "unknown"
+        # Use shared URL ingestion for consistency
+        try:
+            file_content, detected_mime = safe_stream_and_detect_mime(url, allow_http=True)
+            input_source = file_content
+            file_extension = mime_to_extension(detected_mime)
+            parsed = urlparse(url)
+            filename = unquote(parsed.path.split("/")[-1]) or url
+        except Exception as e:
+            return JSONResponse(status_code=400, content={"detail": f"URL error: {e}"})
     elif path:
         input_source = path
         filename = path.split("/")[-1]
         file_extension = path.split(".")[-1].lower()
     else:
         # Try to read JSON body for url/path when no query params provided
-        body_url = None
-        body_path = None
         try:
             if request.headers.get("content-type", "").startswith("application/json"):
                 payload = await request.json()
@@ -99,10 +104,14 @@ async def extract_document(
             body_path = body_path or None
 
         if body_url:
-            input_source = body_url
-            parsed = urlparse(body_url)
-            filename = unquote(parsed.path.split("/")[-1]) or body_url
-            file_extension = "unknown"
+            try:
+                file_content, detected_mime = safe_stream_and_detect_mime(body_url, allow_http=True)
+                input_source = file_content
+                file_extension = mime_to_extension(detected_mime)
+                parsed = urlparse(body_url)
+                filename = unquote(parsed.path.split("/")[-1]) or body_url
+            except Exception as e:
+                return JSONResponse(status_code=400, content={"detail": f"URL error: {e}"})
         elif body_path:
             input_source = body_path
             filename = body_path.split("/")[-1]
@@ -116,14 +125,12 @@ async def extract_document(
     try:
         # Use the utility to get image bytes from any input type with enhanced URL support
         try:
-            print(f"Processing input source: {'URL' if url else ('File' if file else 'Path')}")
+            source_label = 'URL' if url or body_url else ('File' if file else 'Path')
+            print(f"Processing input source: {source_label}")
             image_bytes = get_image_bytes_from_input(input_source)
         except ValueError as url_error:
             print(f"Error processing input: {str(url_error)}")
-            return JSONResponse(
-                status_code=400,
-                content={"detail": str(url_error)}
-            )
+            return JSONResponse(status_code=400, content={"detail": str(url_error)})
 
         if structured:
             # Extract both raw OCR results and structured data
@@ -137,7 +144,7 @@ async def extract_document(
             if isinstance(structured_documents, list) and len(structured_documents) > 1:
                 # Multiple documents found
                 response_data = {
-                    "filename": file.filename if file else (url or path),
+                    "filename": file.filename if file else (url or path or body_url),
                     "multiple_documents": True,
                     "document_count": len(structured_documents),
                     # Convert all FieldWithConfidence objects to dicts recursively
@@ -160,7 +167,7 @@ async def extract_document(
                 relevant_fields = all_relevant_fields[0] if all_relevant_fields else {}
                 
                 response_data = {
-                    "filename": file.filename if file else (url or path),
+                    "filename": file.filename if file else (url or path or body_url),
                     "multiple_documents": False,
                     "document_count": 1,
                     # Convert all FieldWithConfidence objects to dicts recursively
@@ -177,7 +184,7 @@ async def extract_document(
             # OCR-only mode: do not return raw OCR lines; return minimal envelope
             # keeping backward compatibility of route shape (filename present)
             return JSONResponse(content={
-                "filename": file.filename if file else (url or path),
+                "filename": file.filename if file else (url or path or body_url),
                 "message": "Set structured=true to receive extracted JSON fields. Raw OCR lines are not returned."
             })
     
@@ -224,10 +231,14 @@ async def analyze_document(
         file_extension = file.filename.split(".")[-1].lower()
         filename = file.filename
     elif url:
-        input_source = url
-        file_extension = "unknown"
-        parsed = urlparse(url)
-        filename = unquote(parsed.path.split("/")[-1]) or url
+        try:
+            file_content, detected_mime = safe_stream_and_detect_mime(url, allow_http=True)
+            input_source = file_content
+            file_extension = mime_to_extension(detected_mime)
+            parsed = urlparse(url)
+            filename = unquote(parsed.path.split("/")[-1]) or url
+        except Exception as e:
+            raise HTTPException(status_code=400, detail=f"URL error: {e}")
     elif path:
         input_source = path
         file_extension = path.split(".")[-1].lower() if "." in path else "unknown"
@@ -245,10 +256,14 @@ async def analyze_document(
         except Exception:
             pass
         if body_url:
-            input_source = body_url
-            file_extension = "unknown"
-            parsed = urlparse(body_url)
-            filename = unquote(parsed.path.split("/")[-1]) or body_url
+            try:
+                file_content, detected_mime = safe_stream_and_detect_mime(body_url, allow_http=True)
+                input_source = file_content
+                file_extension = mime_to_extension(detected_mime)
+                parsed = urlparse(body_url)
+                filename = unquote(parsed.path.split("/")[-1]) or body_url
+            except Exception as e:
+                raise HTTPException(status_code=400, detail=f"URL error: {e}")
         elif body_path:
             input_source = body_path
             file_extension = body_path.split(".")[-1].lower() if "." in body_path else "unknown"

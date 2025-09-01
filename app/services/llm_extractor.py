@@ -10,6 +10,7 @@ import requests
 from dotenv import load_dotenv
 from groq import Groq
 from pdf2image import convert_from_bytes
+from app.services.url_ingest import safe_stream_and_detect_mime
 
 from app.models.document_data import DocumentData, FieldWithConfidence
 from app.services.document_type_detector import DocumentTypeDetector
@@ -448,23 +449,16 @@ def get_image_bytes_from_input(input_source: Union[bytes, str]) -> bytes:
     if isinstance(input_source, str):
         # Note: Google Drive-specific handling removed. Use standard HTTP(S) handling below.
 
-        # Handle standard URLs
+        # Handle standard URLs via shared ingestion helper
         if input_source.startswith("http"):
             print(f"🔗 Downloading from URL: {input_source[:60]}...")
             try:
-                response = requests.get(input_source)
-                if response.status_code != 200:
-                    raise ValueError(f"Failed to download URL. Status code: {response.status_code}")
-                
-                content_type = response.headers.get("Content-Type", "")
-                print(f"📊 Content type detected: {content_type}")
-                
-                # Process based on content type or file extension
-                if "pdf" in content_type.lower() or input_source.lower().endswith(".pdf"):
-                    # Convert first page of PDF to image bytes
-                    print("📄 Converting PDF to image...")
+                data, mime = safe_stream_and_detect_mime(input_source, allow_http=True)
+                print(f"📊 MIME detected: {mime}")
+                if 'pdf' in mime:
+                    print("📄 Converting PDF (first page) to image bytes...")
                     try:
-                        images = convert_from_bytes(response.content, first_page=1, last_page=1)
+                        images = convert_from_bytes(data, first_page=1, last_page=1)
                         img_byte_arr = io.BytesIO()
                         img = images[0]
                         if img.mode == 'RGBA':
@@ -473,37 +467,11 @@ def get_image_bytes_from_input(input_source: Union[bytes, str]) -> bytes:
                         return img_byte_arr.getvalue()
                     except Exception as e:
                         raise ValueError(f"Error converting PDF to image: {str(e)}")
-                elif any(img_type in content_type.lower() for img_type in ["image/jpeg", "image/jpg", "image/png"]):
-                    # Process as image
-                    print("🖼️ Processing as image from content type...")
-                    return response.content
-                elif input_source.lower().endswith(('.png', '.jpg', '.jpeg')):
-                    # Process as image based on extension
-                    print("🖼️ Processing as image from file extension...")
-                    return response.content
+                elif 'image/' in mime:
+                    print("🖼️ Processing as image bytes from URL...")
+                    return data
                 else:
-                    # Try to detect content type based on binary signature
-                    try:
-                        print("🔍 Attempting to detect content type from binary data...")
-                        if response.content.startswith(b'%PDF'):
-                            print("📄 Detected PDF signature, converting to image...")
-                            images = convert_from_bytes(response.content, first_page=1, last_page=1)
-                            img_byte_arr = io.BytesIO()
-                            img = images[0]
-                            if img.mode == 'RGBA':
-                                img = img.convert('RGB')
-                            img.save(img_byte_arr, format='JPEG')
-                            return img_byte_arr.getvalue()
-                        elif response.content.startswith(b'\xff\xd8\xff'):
-                            print("🖼️ Detected JPEG signature, processing as image...")
-                            return response.content
-                        elif response.content.startswith(b'\x89PNG\r\n\x1a\n'):
-                            print("🖼️ Detected PNG signature, processing as image...")
-                            return response.content
-                        else:
-                            raise ValueError(f"Unsupported file format. Content type: {content_type}")
-                    except Exception as e:
-                        raise ValueError(f"Failed to process content from URL: {str(e)}")
+                    raise ValueError(f"Unsupported file type from URL: {mime}")
             except Exception as e:
                 raise ValueError(f"Error accessing URL: {str(e)}")
                 
@@ -575,23 +543,12 @@ def get_image_pages_from_input(input_source: Union[bytes, str]) -> list[bytes]:
         # URL handling
         if input_source.startswith("http"):
             try:
-                resp = requests.get(input_source)
-                if resp.status_code != 200:
-                    raise ValueError(f"Failed to download URL. Status code: {resp.status_code}")
-                ct = resp.headers.get("Content-Type", "").lower()
-                data = resp.content
-                # PDF by header or extension or signature
-                if "pdf" in ct or input_source.lower().endswith('.pdf') or data.startswith(b'%PDF'):
+                data, mime = safe_stream_and_detect_mime(input_source, allow_http=True)
+                if 'pdf' in mime or input_source.lower().endswith('.pdf') or data.startswith(b'%PDF'):
                     return _pdf_bytes_to_pages(data)
-                # Image content-types and signatures
-                if any(x in ct for x in ["image/jpeg", "image/jpg", "image/png"]):
+                if mime.startswith('image/'):
                     return [data]
-                if data.startswith(b'\xff\xd8\xff') or data.startswith(b'\x89PNG\r\n\x1a\n'):
-                    return [data]
-                # Extension fallback
-                if input_source.lower().endswith(('.png', '.jpg', '.jpeg')):
-                    return [data]
-                raise ValueError(f"Unsupported content from URL. Content-Type: {ct or 'unknown'}")
+                raise ValueError(f"Unsupported content from URL. MIME: {mime}")
             except Exception as e:
                 raise ValueError(f"Error accessing URL: {e}")
 
