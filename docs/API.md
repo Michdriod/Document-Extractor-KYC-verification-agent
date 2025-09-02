@@ -22,7 +22,7 @@ Currently, the API does not require authentication. For production deployments, 
 ## Content Types & Inputs
 
 - File uploads: `multipart/form-data`
-- URL or local path ingestion: query parameters (`url` or `path`)
+- URL or local path ingestion: query parameters or JSON body (`url` or `path`)
 - All endpoints return `application/json` responses.
 
 ---
@@ -85,7 +85,8 @@ curl -X POST "http://localhost:8000/api/extract?structured=true" \
 ```bash
 curl -X POST "http://localhost:8000/api/extract?structured=true" \
   -H "accept: application/json" \
-  "&url=https://example.com/sample.pdf"
+  -H "Content-Type: application/json" \
+  -d '{"url": "https://example.com/sample.pdf"}'
 ```
 
 ##### Local Path (internal use)
@@ -93,7 +94,8 @@ curl -X POST "http://localhost:8000/api/extract?structured=true" \
 ```bash
 curl -X POST "http://localhost:8000/api/extract?structured=true" \
   -H "accept: application/json" \
-  "&path=/absolute/path/to/document.png"
+  -H "Content-Type: application/json" \
+  -d '{"path": "/absolute/path/to/document.png"}'
 ```
 
 ```bash
@@ -188,6 +190,12 @@ curl -X POST "http://localhost:8000/api/analyze" \
   -H "accept: application/json" \
   -H "Content-Type: multipart/form-data" \
   -F "file=@document.pdf"
+
+# or with URL
+curl -X POST "http://localhost:8000/api/analyze" \
+  -H "accept: application/json" \
+  -H "Content-Type: application/json" \
+  -d '{"url": "https://example.com/sample.png"}'
 ```
 
 #### Response Schema
@@ -220,6 +228,11 @@ Processes inputs that may contain multiple documents or long multi-page files, a
 #### `POST /api/extract/enhanced`
 
 **Parameters (query/form):** same as `/api/extract` (`file`, `url`, `path`).
+Request example (URL):
+
+```bash
+curl -X POST "http://localhost:8000/api/extract/enhanced?url=https://example.com/doc.pdf"
+```
 
 **Response (simplified):**
 

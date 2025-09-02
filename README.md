@@ -61,6 +61,19 @@ Each document type features specialized field extraction optimized for its forma
 - Python 3.8+ (recommended: 3.9–3.11)
 - Groq API key
 - Git
+- Poppler (for PDF rendering via pdf2image)
+
+macOS (Homebrew):
+
+```bash
+brew install poppler
+```
+
+Apple Silicon shells may need PATH:
+
+```bash
+echo 'export PATH="/opt/homebrew/bin:$PATH"' >> ~/.zprofile && source ~/.zprofile
+```
 
 ### Quick Start
 
@@ -118,12 +131,12 @@ Extract text and optionally structured data from a single document.
 
 Inputs:
 
-- Provide one of: file upload, HTTPS url, or local path (trusted env only)
+- Provide one of: file upload, URL (HTTP/HTTPS), or local path (trusted env only)
 
 Parameters:
 
 - file (multipart, optional): PDF, JPG, PNG, JPEG
-- url (JSON/form, optional): HTTPS URL to the document (MIME-sniffed and validated)
+- url (JSON/form, optional): URL to the document (HTTP/HTTPS). HTTPS is recommended; stricter HTTPS-only checks apply on `/api/extract/url-ingest`.
 - path (JSON/form, optional): Absolute local path (use only in secure deployments)
 - structured (query): true/false (default: false) to return structured fields
 - include_raw (query): true/false (default: false) to include raw JSON
@@ -143,7 +156,7 @@ curl -X POST "http://localhost:8000/api/extract?structured=true" \
   -H "Content-Type: multipart/form-data" \
   -F "file=@drivers_license.pdf"
 
-# Structured extraction from URL (HTTPS only)
+# Structured extraction from URL (JSON body)
 curl -X POST "http://localhost:8000/api/extract?structured=true" \
   -H "accept: application/json" \
   -H "Content-Type: application/json" \
@@ -188,6 +201,12 @@ Returns:
 
 Use when you want clean, enriched data ready for forms or downstream systems.
 
+Example (URL):
+
+```bash
+curl -X POST "http://localhost:8000/api/extract/enhanced?url=https://example.com/doc.pdf" -H "accept: application/json"
+```
+
 ### POST /api/analyze
 
 Direct structured data extraction (always returns structured data).
@@ -199,6 +218,15 @@ curl -X POST "http://localhost:8000/api/analyze" \
   -H "accept: application/json" \
   -H "Content-Type: multipart/form-data" \
   -F "file=@document.pdf"
+
+Or with URL:
+
+```bash
+curl -X POST "http://localhost:8000/api/analyze" \
+  -H "accept: application/json" \
+  -H "Content-Type: application/json" \
+  -d '{"url": "https://example.com/sample.png"}'
+```
 ```
 
 ## 📊 DocumentData Model
@@ -339,7 +367,7 @@ See requirements.txt for full versions.
 - No Caching: No persistent document storage
 - Secure Processing: Encrypted HTTPS to AI services
 - Privacy First: No data retained after processing
-- Remote URLs: HTTPS-only fetching with MIME sniffing and signature checks; no persistence
+- Remote URLs: `/api/extract/url-ingest` enforces HTTPS with MIME sniffing and size limits. Other endpoints also accept URLs using the same ingestion helper (HTTP/HTTPS configurable); no persistence.
 
 ### API Security
 
